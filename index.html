@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPACESHIP INVASION</title>
+<link rel="stylesheet" href="./src/style.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+</style>
+</head>
+<body>
+<div class="game-wrapper">
+
+  <div class="hud">
+    <div class="hud-block">
+      <div class="hud-label">score</div>
+      <div class="hud-value" id="scoreDisplay">000000</div>
+    </div>
+    <div class="hud-block center">
+      <div class="hud-label">wave</div>
+      <div class="hud-value" id="waveDisplay">— —</div>
+    </div>
+    <div class="hud-block right">
+      <div class="hud-label">lives</div>
+      <div class="hud-value" id="livesDisplay">♦ ♦ ♦</div>
+    </div>
+  </div>
+
+  <div class="canvas-wrapper">
+    <canvas id="bgCanvas"   width="858" height="676"></canvas>
+    <canvas id="gameCanvas" width="858" height="676"></canvas>
+    <div id="overlay">
+      <!-- Content populated by main.js -->
+    </div>
+  </div>
+
+  <div class="footer-hints">
+    <span><em>← →</em> mover</span>
+    <span><em>espaço</em> atirar</span>
+    <span><em>P</em> pausa</span>
+    <span><em>R</em> reiniciar</span>
+  </div>
+
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
