@@ -197,15 +197,19 @@ space-invaders/
 └── README.md
 ```
 
-### Bundler recomendado: **Vite**
+### Bundler recomendado e em uso: **Vite**
 
 ```bash
-npm create vite@latest space-invaders -- --template vanilla
-cd space-invaders
-npm install
-npm run dev    # desenvolvimento
-npm run build  # gera dist/ para produção
+npm run dev    # Ambiente de desenvolvimento em localhost
+npm run build  # Compila e gera pasta dist/ ofuscada e otimizada para produção
+npm run test   # Roda a stack de Vitest em watch-mode
 ```
+
+#### Omitir o Helper em Produção:
+Quando formos "empacotar" o jogo para produção, usaremos o Vite (que já está configurado no repositório) para remover qualquer linha de exposição global usando as variáveis de ambiente em tempo de compilação.
+>(ex: `if (import.meta.env.DEV) { window.GameTest = ... }`).
+
+Assim, no jogo final, todas essas facilidades e atalhos abertos para automação somem, não criando nenhum risco de injeção ou vulnerabilidade via console do DevTools.
 
 ---
 
@@ -227,25 +231,26 @@ export const FEATURES = {
 };
 ```
 
-### Features planejadas (backlog sugerido):
+### Features planejadas (backlog atualizado):
 
-**P0 (próxima sprint):**
-- [ ] Efeitos sonoros (Web Audio API)
-- [ ] Tela de Game Over com score final
-- [ ] Suporte a toque mobile (virtual joystick)
-- [ ] Persistência de high score (localStorage)
+**P0 (Concluídas e em Andamento):**
+- [x] Jogo base com escalonamento infinito (100+ Waves)
+- [x] Sistema de Drops Recompensadores (Vidas aleatórias e Níveis de Arma crescentes)
+- [x] Efeito de Ímã End-Wave para evitar perda acidental de drop
+- [x] Batalhas Épicas contra Chefões (Bosses) a cada 10 ondas, com shield e tiro-triplo
+- [x] Bateria de Automação de CQA via Vitest 
+- [ ] Adicionar Efeitos Sonoros / Trilha Sonora (Web Audio API)
+- [ ] Tela de Game Over completa computando score final offline
+- [ ] Painel direcional Touch (Virtual Joystick) para Mobile UI
 
-**P1:**
-- [ ] Leaderboard online (backend + banco de dados)
-- [ ] Autenticação de usuários (login/registro)
-- [ ] Power-ups (escudo temporário, tiro triplo, bomba)
-- [ ] Wave de boss a cada 5 levels
+**P1 (Sistemas Online & Comunidade):**
+- [ ] **Leaderboard online mundial / Top 10 Ranks** (Requer backend Database)
+- [ ] Autenticação de jogadores para proteção do ranqueamento do Leaderboard
+- [ ] Novos Buffs (Escudo de Invulnerabilidade temporária)
 
-**P2:**
-- [ ] Editor de sprites no próprio painel
-- [ ] Modo co-op local (2 jogadores, mesmo teclado)
-- [ ] Sistema de conquistas
-- [ ] Histórico de partidas
+**P2 (Futuro Distante):**
+- [ ] Modo cooperativo local share-screen
+- [ ] Eventos sazonais e novas cores Neon de acordo com estéticas
 
 ---
 
@@ -425,31 +430,28 @@ app.use(helmet());
 
 ## 10. Roadmap Sugerido <a name="roadmap"></a>
 
-### Sprint 1 — Fundação (atual)
-- [x] Jogo funcional com configuração em tempo real
-- [x] 3 tipos de sprites animados
-- [x] Sistema de escudos destrutíveis
-- [x] Partículas e efeitos visuais
-- [ ] Migrar para estrutura de projeto com Vite
-- [ ] Adicionar linting (ESLint) e formatação (Prettier)
+### Sprint 1 — Fundação & Escalabilidade Base (Concluída)
+- [x] Jogo funcional com configuração em tempo real via UI
+- [x] Migração para módulo ecossistema com bundler Vite
+- [x] Multiplas entidades dinâmicas (Boss, Elite, Escudos, Partículas)
+- [x] Framework de colisão rigoroso
+- [x] Design progressivo com 100 leveis estruturados
 
-### Sprint 2 — Qualidade
-- [ ] Testes unitários das funções de colisão e lógica
-- [ ] Testes E2E básicos com Playwright
-- [ ] CI pipeline no GitHub Actions
-- [ ] Web Audio API para efeitos sonoros
+### Sprint 2 — Mecânicas & Lógica Definitiva (Quase Concluída)
+- [x] Testes Mapeados TDD (Unit) e Testes Visuais em navegador  
+- [x] Pishing & Otimizações: Balanceamento (-15% Endgame Nerf)
+- [x] Sistema de Loot Completo (Armas em leque e Drops dinâmicos baseados no RNG)
+- [ ] Áudio imersivo (Lasers, Explosões e Warnings do Boss)
 
-### Sprint 3 — Backend
-- [ ] Servidor Node.js + Express (ou Next.js full-stack)
-- [ ] Banco de dados (PostgreSQL via Supabase ou Railway)
-- [ ] Leaderboard com top 10 global
-- [ ] Autenticação (login com Google via Auth0)
+### Sprint 3 — Cloud, Identidade e Competição (Iniciando em Breve)
+- [ ] Estrutura Backend (SupaBase ou Banco SQLite na nuvem)
+- [ ] Configuração de Identificação de Usuário
+- [ ] Criação de Tabela "Leaderboard Global" cravando os maiores recordes alcançados 
 
-### Sprint 4 — Produção
-- [ ] Deploy em produção (Vercel ou AWS)
-- [ ] Monitoramento de erros (Sentry)
-- [ ] Analytics de jogo (quais waves mais causam game over, etc.)
-- [ ] CDN para assets estáticos
+### Sprint 4 — Publish (Final Release)
+- [ ] Refino de vulnerabilidades (Ocultar API de testes import.meta.env.DEV)
+- [ ] Monitoramento Live (Deploy na Vercel/Netlify)
+- [ ] Resizer responsivo Mobile Fullscreen
 
 ---
 
