@@ -113,11 +113,17 @@ export function applyWeaponPenalty(currentLevel) {
 }
 
 /**
- * Define o tipo de drop com base no nível atual da arma do jogador.
- * Se a arma já está no máximo, o drop cai como cura (heart); senão, como upgrade (weapon).
+ * Define o tipo de drop solto por inimigos especiais (Elite).
+ * Agora possui chance mista nativa: ~25% de chance de ser cura (heart) independente do nível,
+ * do contrário, surge um upgrade (weapon). Se a arma já estiver completa, sempre dá vida.
  * @param {number} weaponLevel 
  * @returns {'heart'|'weapon'}
  */
 export function resolveDropType(weaponLevel) {
+  // 25% de chance crua de surgir vida extra independentemente do nível de poder da nave:
+  if (Math.random() <= 0.25) {
+    return 'heart';
+  }
+  // Se não caiu nos 25% e arma estiver no máximo, prioriza vida pra evitar drop inútil
   return weaponLevel >= WEAPON.MAX_LEVEL ? 'heart' : 'weapon';
 }

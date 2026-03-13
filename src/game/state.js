@@ -25,6 +25,7 @@ export let state = {
   
   paused: false,         // Flag se o jogo está pausado
   over: false,           // Flag se o jogo terminou (game over ou wave clear)
+  postWaveMagnet: false, // Flag se a fase acabou mas ainda está sugando os drops restantes
   _lastTs: 0,            // Timestamp do último frame renderizado (para cálculo de Delta Time - dt)
   score: 0,              // Pontuação acumulada
   

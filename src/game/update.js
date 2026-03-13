@@ -28,12 +28,15 @@ export function update(dt, ts, GameCallbacks) {
   }
 
   // ── Movimento do jogador ──────────────────────────────────
-  if (keys['ArrowLeft']  || keys['KeyA']) state.player.x -= cfg.playerSpeed;
-  if (keys['ArrowRight'] || keys['KeyD']) state.player.x += cfg.playerSpeed;
-  state.player.x = Math.max(0, Math.min(W - state.player.w, state.player.x));
+  if (!state.postWaveMagnet) {
+    if (keys['ArrowLeft']  || keys['KeyA']) state.player.x -= cfg.playerSpeed;
+    if (keys['ArrowRight'] || keys['KeyD']) state.player.x += cfg.playerSpeed;
+    state.player.x = Math.max(0, Math.min(W - state.player.w, state.player.x));
+  }
 
   // ── Tiro do jogador ───────────────────────────────────────
   const canFire =
+    !state.postWaveMagnet &&
     state.bullets.length < cfg.playerMaxBullets &&
     ts - state.lastFire > cfg.playerFireCooldown;
 
@@ -243,12 +246,26 @@ export function update(dt, ts, GameCallbacks) {
     return true;
   });
 
-  // ── Drops — queda e coleta ────────────────────────────────
+  // ── Drops — queda e coleta (Efeito Ímã End-Wave) ──────────
   state.drops = state.drops.filter(drop => {
-    drop.y    += drop.vy;
+    if (state.postWaveMagnet) {
+      // Puxa o drop vigorosamente na direção da nave
+      const px = state.player.x + state.player.w / 2;
+      const py = state.player.y + state.player.h / 2;
+      const dx = px - drop.x;
+      const dy = py - drop.y;
+      const dist = Math.hypot(dx, dy) || 1; // Evita divisão por zero
+      
+      const speed = 12; // Velocidade alta de atração
+      drop.x += (dx / dist) * speed;
+      drop.y += (dy / dist) * speed;
+    } else {
+      drop.y += drop.vy;
+    }
+    
     drop.frame++;
 
-    if (drop.y > H) return false;
+    if (drop.y > H && !state.postWaveMagnet) return false;
 
     if (
       drop.x > state.player.x - 16 && drop.x < state.player.x + state.player.w + 16 &&
@@ -271,16 +288,23 @@ export function update(dt, ts, GameCallbacks) {
 
   // ── Vitória ───────────────────────────────────────────────
   if (alive.length === 0 && !state.boss.active) {
-    state.score += cfg.bonusPoints || 0;
-    GameCallbacks.updateHUD();
-
-    // Checa se deve spawnar Boss (a cada 10 fases)
-    if (BOSS_CONFIGS[state.wave]) {
-      createBoss(state.wave, BOSS_CONFIGS);
+    if (state.drops.length > 0) {
+      // Acabaram os inimigos, mas ainda há drops. Trave o avanço e ligue o ímã!
+      state.postWaveMagnet = true;
     } else {
-      GameCallbacks.showWaveClear();
+      // Tudo coletado (ou não haviam drops), prossiga com Wave Clear normalmente
+      state.postWaveMagnet = false;
+      state.score += cfg.bonusPoints || 0;
+      GameCallbacks.updateHUD();
+
+      // Checa se deve spawnar Boss (a cada 10 fases)
+      if (BOSS_CONFIGS[state.wave]) {
+        createBoss(state.wave, BOSS_CONFIGS);
+      } else {
+        GameCallbacks.showWaveClear();
+      }
+      return;
     }
-    return;
   }
 
   // ── Partículas ────────────────────────────────────────────
