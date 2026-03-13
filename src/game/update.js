@@ -1,8 +1,8 @@
 import { state, updateState } from './state.js';
-import { PHYSICS, SCORING, VISUAL, WEAPON } from './config.js';
+import { PHYSICS, SCORING, VISUAL, WEAPON, BOSS_CONFIGS } from './config.js';
 import { keys } from './input.js';
 import { enemyColor } from './sprites.js';
-import { spawnParticles, spawnDrop } from './helpers.js';
+import { spawnParticles, spawnDrop, createBoss } from './helpers.js';
 import { getBulletPattern, applyWeaponPenalty, resolveDropType } from './weapons.js';
 
 export function update(dt, ts, GameCallbacks) {
@@ -75,8 +75,14 @@ export function update(dt, ts, GameCallbacks) {
           state.score += 5000 * (state.wave / 10);
           spawnParticles(boss.x + PHYSICS.BOSS_W/2, boss.y + PHYSICS.BOSS_H/2, boss.neon ? '#00ffff' : '#ff0044', 40);
           GameCallbacks.updateHUD();
-          GameCallbacks.showWaveClear();
+          // Se foi iniciado pelo debug de boss, mostra mensagem especial
+          if (state.isBossDebugRun) {
+            GameCallbacks.showBossTestComplete(state.wave);
+          } else {
+            GameCallbacks.showWaveClear();
+          }
         }
+
         return false;
       }
     }
@@ -267,11 +273,9 @@ export function update(dt, ts, GameCallbacks) {
   if (alive.length === 0 && !state.boss.active) {
     state.score += cfg.bonusPoints || 0;
     GameCallbacks.updateHUD();
-    
-    // Checa se deve spawnar Boss
-    const { BOSS_CONFIGS } = require('./config.js');
+
+    // Checa se deve spawnar Boss (a cada 10 fases)
     if (BOSS_CONFIGS[state.wave]) {
-      const { createBoss } = require('./helpers.js');
       createBoss(state.wave, BOSS_CONFIGS);
     } else {
       GameCallbacks.showWaveClear();

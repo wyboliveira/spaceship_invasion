@@ -108,9 +108,11 @@ export const WAVE_BANDS = [
   {
     waveStart: 61,  waveEnd: 70,
     enemyCols: 12,  enemyRows: 5,  enemyHP: 4,
-    enemySpeed: 3.2,  enemyDropStep: 27,
-    fireRateStart: 2.25,  fireRateEnd: 3.00,
-    enemyBulletSpd: 5.00,
+    enemySpeed: 2.72,  // -15% (era 3.2)
+    enemyDropStep: 27,
+    fireRateStart: 1.91,  // -15% (era 2.25)
+    fireRateEnd: 2.55,    // -15% (era 3.00)
+    enemyBulletSpd: 4.25, // -15% (era 5.0)
     playerLives: 5,  playerSpeed: 9.5,
     playerMaxBullets: 5,  playerBulletSpd: 19.5,
     playerFireCooldown: 150,
@@ -123,9 +125,11 @@ export const WAVE_BANDS = [
   {
     waveStart: 71,  waveEnd: 85,
     enemyCols: 12,  enemyRows: 5,  enemyHP: 5,
-    enemySpeed: 3.6,  enemyDropStep: 28,
-    fireRateStart: 2.75,  fireRateEnd: 3.75,
-    enemyBulletSpd: 5.50,
+    enemySpeed: 3.06,  // -15% (era 3.6)
+    enemyDropStep: 28,
+    fireRateStart: 2.34,  // -15% (era 2.75)
+    fireRateEnd: 3.19,    // -15% (era 3.75)
+    enemyBulletSpd: 4.68, // -15% (era 5.5)
     playerLives: 5,  playerSpeed: 10.0,
     playerMaxBullets: 5,  playerBulletSpd: 21.0,
     playerFireCooldown: 140,
@@ -138,9 +142,11 @@ export const WAVE_BANDS = [
   {
     waveStart: 86,  waveEnd: 100,
     enemyCols: 12,  enemyRows: 5,  enemyHP: 6,
-    enemySpeed: 4.2,  enemyDropStep: 30,
-    fireRateStart: 3.50,  fireRateEnd: 5.00,
-    enemyBulletSpd: 6.50,
+    enemySpeed: 3.57,  // -15% (era 4.2)
+    enemyDropStep: 30,
+    fireRateStart: 2.98,  // -15% (era 3.50)
+    fireRateEnd: 4.25,    // -15% (era 5.00)
+    enemyBulletSpd: 5.53, // -15% (era 6.5)
     playerLives: 5,  playerSpeed: 10.5,
     playerMaxBullets: 5,  playerBulletSpd: 22.0,
     playerFireCooldown: 130,
@@ -152,15 +158,16 @@ export const WAVE_BANDS = [
   // ── Adicione bandas aqui para estender além da wave 100 ──
 ];
 
+// O fator de avanço progressivo infinito para waves acima de 100
 export const DIFFICULTY_SCALING = {
-  enemySpeedPerWave:      0.05,
-  enemyFireRatePerWave:   0.08,
-  enemyBulletSpdPerWave:  0.06,
-  enemyHPEveryNWaves:     5,
+  enemySpeedPerWave:      0.0425, // -15% (era 0.05)
+  enemyFireRatePerWave:   0.068,  // -15% (era 0.08)
+  enemyBulletSpdPerWave:  0.051,  // -15% (era 0.06)
+  enemyHPEveryNWaves:     5,      // Adiciona +1 de HP a inimigos normais a cada X ondas extras
   maxEnemyCols:           12,
   maxEnemyRows:           5,
-  maxEnemyFireRate:       6.5,
-  maxEnemyBulletSpd:      9.0,
+  maxEnemyFireRate:       5.53,   // -15% do teto global (era 6.5)
+  maxEnemyBulletSpd:      7.65,   // -15% do teto global (era 9.0)
 };
 
 export function getWaveConfig(n) {
@@ -202,37 +209,38 @@ export function getWaveConfig(n) {
   return {
     ...base,
     wave:           n,
-    enemySpeed:     Math.min(base.enemySpeed     + DIFFICULTY_SCALING.enemySpeedPerWave    * extra, 6),
+    enemySpeed:     Math.min(base.enemySpeed     + DIFFICULTY_SCALING.enemySpeedPerWave    * extra, 5.1), // teto 5.1 (era 6)
     enemyFireRate:  Math.min(base.enemyFireRate  + DIFFICULTY_SCALING.enemyFireRatePerWave * extra, DIFFICULTY_SCALING.maxEnemyFireRate),
     enemyBulletSpd: Math.min(base.enemyBulletSpd + DIFFICULTY_SCALING.enemyBulletSpdPerWave * extra, DIFFICULTY_SCALING.maxEnemyBulletSpd),
     enemyHP:        base.enemyHP + Math.floor(extra / DIFFICULTY_SCALING.enemyHPEveryNWaves),
     bonusPoints:    base.bonusPoints + extra * 2000,
-    eliteChance:    Math.min((base.eliteChance || 0.28) + 0.005 * extra, 0.45),
+    eliteChance:    Math.min((base.eliteChance || 0.28) + 0.005 * extra, 0.45), // Máx 45% de elites no inferno
   };
 }
 
+// Dimensões e posicionamentos (Hardcoded physics params)
 export const PHYSICS = {
   CANVAS_W:         858,
   CANVAS_H:         676,
   ENEMY_W:          34,
   ENEMY_H:          29,
-  ENEMY_SPACING_X:  57,
-  ENEMY_SPACING_Y:  49,
-  ENEMY_START_X:    65,
-  ENEMY_START_Y:    62,
-  ENEMY_MOVE_BASE:  900,
+  ENEMY_SPACING_X:  57,  // Espaçamento horizontal na grade alienígena
+  ENEMY_SPACING_Y:  49,  // Espaçamento vertical na grade
+  ENEMY_START_X:    65,  // Posição X inicial da grade no canvas
+  ENEMY_START_Y:    62,  // Posição Y inicial
+  ENEMY_MOVE_BASE:  900, // Intervalo base em ms para step lateral dos inimigos (modificado pelo cfg)
   PLAYER_W:         34,
   PLAYER_H:         36,
-  PLAYER_Y_OFFSET:  68,
-  SHIELD_BLOCK_SZ:  13,
-  SHIELD_Y_OFFSET:  169,
-  SHIELD_COUNT:     4,
-  SHIELD_BLOCK_HP:  3,
-  PARTICLE_GRAVITY: 0.1,
-  PARTICLE_DECAY:   0.028,
+  PLAYER_Y_OFFSET:  68,  // Distância que o jogador fica da base da tela
+  SHIELD_BLOCK_SZ:  13,  // Tamanho em pixels dos mini-blocos do escudo
+  SHIELD_Y_OFFSET:  169, // Altura que os 4 pilares de escudo são renderizados a partir do bottom
+  SHIELD_COUNT:     4,   // Número de escudos de defesa
+  SHIELD_BLOCK_HP:  3,   // Vida individual de cada bloco
+  PARTICLE_GRAVITY: 0.1, // Gravidade padrão
+  PARTICLE_DECAY:   0.028, // Fator que dita quão rápido a partícula some
 
-  BOSS_W:           119, // ~3.5x regular ENEMY_W (34 * 3.5)
-  BOSS_H:           102, // ~3.5x regular ENEMY_H (29 * 3.5)
+  BOSS_W:           119, // Tamanho do chefão ~3.5x do inimigo comum (34 * 3.5 = 119)
+  BOSS_H:           102, // Altura chefão
 };
 
 export const BOSS_CONFIGS = {
