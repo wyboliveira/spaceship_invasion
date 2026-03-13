@@ -70,3 +70,61 @@ describe('Wave Configuration', () => {
     expect(cfg105.enemyHP).toBeGreaterThan(cfg100.enemyHP);
   });
 });
+
+describe('Drop System & Magnet', () => {
+  it('should have a chance to drop hearts regardless of level', () => {
+    const { resolveDropType } = require('../src/game/weapons.js');
+    // Força level 1, se executarmos 100 vezes, alguns devem ser 'heart' (aprox 25%)
+    let hearts = 0;
+    for (let i = 0; i < 100; i++) {
+      if (resolveDropType(1) === 'heart') hearts++;
+    }
+    expect(hearts).toBeGreaterThan(0);
+    expect(hearts).toBeLessThan(100);
+  });
+
+  it('should forcefully drop hearts if weapon is maxed out', () => {
+    const { resolveDropType } = require('../src/game/weapons.js');
+    const { WEAPON } = require('../src/game/config.js');
+    for (let i = 0; i < 50; i++) {
+       expect(resolveDropType(WEAPON.MAX_LEVEL)).toBe('heart');
+    }
+  });
+
+  it('should enable postWaveMagnet if enemies are dead but drops exist', () => {
+    const { update } = require('../src/game/update.js');
+    const { state, resetState } = require('../src/game/state.js');
+    
+    // Mock the state
+    resetState({
+      cfg: getWaveConfig(1),
+      wave: 1,
+      player: { x: 100, y: 500, w: 34, h: 36 },
+      enemies: [],
+      boss: { active: false },
+      drops: [{ x: 10, y: 10, type: 'weapon', vy: 1, frame: 0 }],
+      bullets: [],
+      eBullets: [],
+      shields: [],
+      particles: [],
+      postWaveMagnet: false
+    });
+
+    const mockCallbacks = {
+      updateHUD: () => {},
+      showWaveClear: () => {},
+      triggerGameOver: () => {}
+    };
+
+    update(16, 1000, mockCallbacks);
+
+    // Na primeira passagem (inimigos == 0, drops > 0), a flag DEVE ser ativada
+    expect(state.postWaveMagnet).toBe(true);
+
+    // O item também deve ter seu vetor apontado para a nave
+    // (player no x:100, item no x:10, então x deve aumentar positivamente proximo a 12)
+    const d = state.drops[0];
+    expect(d.x).toBeGreaterThan(10);
+    expect(d.y).toBeGreaterThan(10);
+  });
+});

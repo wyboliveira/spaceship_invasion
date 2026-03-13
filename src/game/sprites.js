@@ -1,25 +1,33 @@
 import { VISUAL, PHYSICS } from './config.js';
 
 // ── Helpers de cor ───────────────────────────────────────────
+/**
+ * Retorna a cor do inimigo com base em qual linha (row) da grade ele está.
+ * Linhas mais frontais (0, 1) possuem cores e valores diferentes.
+ */
 export function enemyColor(row) {
-  if (row < 1) return VISUAL.COLOR_ENEMY_A;
-  if (row < 3) return VISUAL.COLOR_ENEMY_B;
-  return VISUAL.COLOR_ENEMY_C;
+  if (row < 1) return VISUAL.COLOR_ENEMY_A; // Tipo A (frente)
+  if (row < 3) return VISUAL.COLOR_ENEMY_B; // Tipo B (meio)
+  return VISUAL.COLOR_ENEMY_C;              // Tipo C (trás)
 }
 
-// ── Player ───────────────────────────────────────────────────
+// ── Player (Nave principal) ───────────────────────────────────
+/**
+ * Desenha a nave do jogador na tela com um propulsor (thruster) animado.
+ */
 export function drawPlayer(ctx, x, y) {
   ctx.shadowColor = VISUAL.COLOR_PLAYER_GLOW;
   ctx.shadowBlur  = 14;
   ctx.fillStyle   = VISUAL.COLOR_PLAYER;
 
-  ctx.fillRect(x + 10, y + 8,  6, 18);   // fuselagem
+  // Montagem do Sprite (Pixel art)
+  ctx.fillRect(x + 10, y + 8,  6, 18);   // fuselagem central
   ctx.fillRect(x + 2,  y + 16, 8,  6);   // asa esquerda
   ctx.fillRect(x + 16, y + 16, 8,  6);   // asa direita
-  ctx.fillRect(x + 11, y + 2,  4,  8);   // nariz
-  ctx.fillRect(x + 12, y,      2,  4);   // ponta
+  ctx.fillRect(x + 11, y + 2,  4,  8);   // bico/nariz
+  ctx.fillRect(x + 12, y,      2,  4);   // ponta da arma
 
-  // Thruster animado
+  // Thruster animado (Fogo do motor)
   ctx.fillStyle = `rgba(255,200,50,0.85)`;
   ctx.fillRect(x + 11, y + 26, 4, Math.floor(Math.random() * 7) + 2);
 
@@ -27,14 +35,19 @@ export function drawPlayer(ctx, x, y) {
 }
 
 // ── Enemy (normal e elite) ───────────────────────────────────
+/**
+ * Desenha um inimigo individual na tela.
+ * A forma geométrica varia dependendo da linha (row) a qual o inimigo pertence.
+ * Inimigos 'elite' pulsam lentamente e possuem uma pequena "coroa" brilhante no topo.
+ */
 export function drawEnemy(ctx, x, y, row, hp, maxHp, frame, isElite = false) {
   const baseCol = enemyColor(row);
-  const t       = Math.floor(frame * 0.05) % 2;
+  const t       = Math.floor(frame * 0.05) % 2; // Alterna entre estado 0 e 1 (para movimentar patinhas/tentáculos)
 
-  // Elite: pulsa entre a cor base e dourado
+  // Elite: pulsação visual fluida interpolando cor base e dourado
   let col = baseCol;
   if (isElite) {
-    const pulse = (Math.sin(frame * 0.12) + 1) / 2;  // 0–1
+    const pulse = (Math.sin(frame * 0.12) + 1) / 2;  // Vai de 0 a 1 suavemente
     col = lerpColor(baseCol, VISUAL.COLOR_ELITE_PULSE, 0.4 + pulse * 0.6);
   }
 
@@ -42,7 +55,7 @@ export function drawEnemy(ctx, x, y, row, hp, maxHp, frame, isElite = false) {
   ctx.shadowBlur  = isElite ? 14 : 7;
   ctx.fillStyle   = col;
 
-  // ── Sprites pixel art por row ────────────────────────────
+  // ── Sprites pixel art ──────────────────────────────────────
   if (row < 1) {
     // Tipo A — calamar
     ctx.fillRect(x + 6,  y + 2,  14, 4);
@@ -196,6 +209,104 @@ export function drawWeaponIndicator(ctx, level, W, H) {
     ctx.fillRect(ix - 3, startY - 2, 7, 2);
   }
   ctx.shadowBlur = 0;
+}
+
+// ── Boss ───────────────────────────────────────────────────────
+export function drawBoss(ctx, boss, frame, wave) {
+  const { x, y } = boss;
+  const W = boss.w || 119;
+  const H = boss.h || 102;
+  const pulse = (Math.sin(frame * 0.05) + 1) / 2;
+
+  // Flash de hit (branco ao ser atingido)
+  if (boss.flashTimer > 0) {
+    ctx.fillStyle   = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur  = 30;
+    ctx.fillRect(x, y, W, H);
+    ctx.shadowBlur  = 0;
+    boss.flashTimer -= 16;
+    if (boss.flashTimer < 0) boss.flashTimer = 0;
+    return;
+  }
+
+  // Glow pulsante externo
+  const glowColor = boss.neon ? '#00ffcc' : '#ff4400';
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur  = 20 + pulse * 20;
+
+  // Corpo principal do boss (pixel-art escalado ~3.5x)
+  ctx.fillStyle = boss.neon ? '#00ccaa' : '#cc2200';
+  ctx.fillRect(x + 10, y,        W - 20, H - 20);
+  ctx.fillRect(x,      y + 15,   W,      H - 40);
+  ctx.fillRect(x + 20, y + H - 25, W - 40, 25);
+
+  ctx.fillStyle = boss.neon ? '#00ffee' : '#ff5500';
+  ctx.fillRect(x + 20, y + 10,   W - 40, H - 30);
+  ctx.fillRect(x + 40, y,        W - 80, 20);
+
+  // Olhos do boss
+  ctx.fillStyle   = '#ffffff';
+  ctx.shadowBlur  = 15;
+  ctx.shadowColor = '#ffffff';
+  ctx.fillRect(x + 22, y + 25, 16, 14);
+  ctx.fillRect(x + W - 38, y + 25, 16, 14);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(x + 25, y + 28, 10, 8);
+  ctx.fillRect(x + W - 35, y + 28, 10, 8);
+
+  // Detalhe central (boca/núcleo)
+  ctx.fillStyle   = boss.neon ? '#00ffcc' : '#ffaa00';
+  ctx.shadowColor = boss.neon ? '#00ffcc' : '#ffaa00';
+  ctx.shadowBlur  = 10 + pulse * 10;
+  ctx.fillRect(x + W/2 - 15, y + H - 30, 30, 8);
+  ctx.fillRect(x + W/2 - 8,  y + H - 22, 16, 5);
+
+  // Efeito neon especial para wave 100
+  if (boss.neon) {
+    ctx.strokeStyle = '#00ffcc';
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = '#00ffcc';
+    ctx.shadowBlur  = 25 + pulse * 15;
+    ctx.strokeRect(x + 4, y + 4, W - 8, H - 8);
+    ctx.strokeRect(x + 12, y + 12, W - 24, H - 24);
+  }
+
+  ctx.shadowBlur = 0;
+
+  // Escudo
+  if (boss.shield > 0) drawBossShield(ctx, boss, frame);
+
+  // Barra de HP
+  const barW = W;
+  const barH = 6;
+  const barY = y - 14;
+  const hpRatio = Math.max(0, boss.hp / boss.maxHp);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(x, barY, barW, barH);
+  const hpCol = hpRatio > 0.5 ? '#00ff88' : hpRatio > 0.25 ? '#ffaa00' : '#ff3355';
+  ctx.fillStyle   = hpCol;
+  ctx.shadowColor = hpCol;
+  ctx.shadowBlur  = 6;
+  ctx.fillRect(x, barY, barW * hpRatio, barH);
+  ctx.shadowBlur = 0;
+}
+
+function drawBossShield(ctx, boss, frame) {
+  const pulse = (Math.sin(frame * 0.08) + 1) / 2;
+  const shieldAlpha = 0.4 + pulse * 0.4;
+  ctx.globalAlpha = shieldAlpha;
+  ctx.strokeStyle = '#00ffff';
+  ctx.shadowColor = '#00ffff';
+  ctx.shadowBlur  = 15 + pulse * 10;
+  ctx.lineWidth   = 3;
+  const sx = boss.x - 8;
+  const sy = boss.y - 8;
+  const sw = (boss.w || 119) + 16;
+  const sh = (boss.h || 102) + 16;
+  ctx.strokeRect(sx, sy, sw, sh);
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur  = 0;
 }
 
 // ── Utilitário ────────────────────────────────────────────────
