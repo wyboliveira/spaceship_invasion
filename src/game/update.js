@@ -12,6 +12,21 @@ export function update(dt, ts, GameCallbacks) {
   const W = PHYSICS.CANVAS_W;
   const H = PHYSICS.CANVAS_H;
 
+  // ── Boss Intro Animation / Paralisação ───────────────────
+  if (state.boss.active && state.boss.introAnim) {
+    const b = state.boss;
+    const targetX = W / 2 - PHYSICS.BOSS_W / 2;
+    const step = 4;
+    
+    if (Math.abs(b.x - targetX) > step) {
+      b.x += b.side === 'left' ? step : -step;
+    } else {
+      b.x = targetX;
+      b.introAnim = false; // Recupera o controle
+    }
+    return; // Trava o resto do jogo durante o surgimento
+  }
+
   // ── Movimento do jogador ──────────────────────────────────
   if (keys['ArrowLeft']  || keys['KeyA']) state.player.x -= cfg.playerSpeed;
   if (keys['ArrowRight'] || keys['KeyD']) state.player.x += cfg.playerSpeed;
@@ -38,6 +53,33 @@ export function update(dt, ts, GameCallbacks) {
     b.x += b.vx || 0;
     b.y += b.vy;
     if (b.y < 0 || b.x < 0 || b.x > W) return false;
+
+    // Colisão com Boss
+    if (state.boss.active && !state.boss.introAnim) {
+      const boss = state.boss;
+      if (
+        b.x > boss.x && b.x < boss.x + PHYSICS.BOSS_W &&
+        b.y > boss.y && b.y < boss.y + PHYSICS.BOSS_H
+      ) {
+        if (boss.shield > 0) {
+          boss.shield--;
+          spawnParticles(b.x, b.y, '#00ffff', 5);
+        } else {
+          boss.hp -= b.damage || 1;
+          boss.flashTimer = 100; // Efeito de piscar branco
+          spawnParticles(b.x, b.y, '#ffffff', 5);
+        }
+
+        if (boss.hp <= 0) {
+          boss.active = false;
+          state.score += 5000 * (state.wave / 10);
+          spawnParticles(boss.x + PHYSICS.BOSS_W/2, boss.y + PHYSICS.BOSS_H/2, boss.neon ? '#00ffff' : '#ff0044', 40);
+          GameCallbacks.updateHUD();
+          GameCallbacks.showWaveClear();
+        }
+        return false;
+      }
+    }
 
     // Colisão com inimigos
     for (const e of state.enemies) {
@@ -89,25 +131,63 @@ export function update(dt, ts, GameCallbacks) {
     return true;
   });
 
+  // ── Lógica do Boss (Movimento e Tiro) ─────────────────────
+  if (state.boss.active && !state.boss.introAnim) {
+    const b = state.boss;
+    const speed = cfg.enemySpeed * 1.5 * b.speedMult;
+    
+    b.x += b.dir * speed;
+    if (b.x <= 0 || b.x + PHYSICS.BOSS_W >= W) {
+      b.dir *= -1;
+    }
+
+    b.fireTimer += dt;
+    const fireRate = b.weapons ? 1.5 : 0.8;
+    if (b.fireTimer >= 1000 / fireRate) {
+      b.fireTimer = 0;
+      const bx = b.x + PHYSICS.BOSS_W / 2;
+      const by = b.y + PHYSICS.BOSS_H;
+      
+      if (b.weapons) {
+        // Atira 3 balas: 270 (baixo), 250, 290
+        const angles = [0, -20, 20]; // relat. ao vertical
+        for (const deg of angles) {
+          const rad = (deg * Math.PI) / 180;
+          state.eBullets.push({
+            x: bx, y: by,
+            vx: 3 * Math.sin(rad),
+            vy: 3 * Math.cos(rad)
+          });
+        }
+      } else {
+        state.eBullets.push({ x: bx, y: by, vy: cfg.enemyBulletSpd * 1.2 });
+      }
+    }
+    
+    if (b.flashTimer > 0) b.flashTimer -= dt;
+  }
+
   // ── Movimento lateral dos inimigos ────────────────────────
   const alive      = state.enemies.filter(e => e.alive);
   const speedMul   = 1 + (1 - alive.length / (state.enemies.length || 1)) * 2.2;
-  state.enemyMoveTimer += dt;
-
-  if (state.enemyMoveTimer >= PHYSICS.ENEMY_MOVE_BASE / (cfg.enemySpeed * speedMul)) {
-    state.enemyMoveTimer = 0;
-    const step = 10 * state.enemyDir;
-    let hit = false;
-    for (const e of alive) {
-      if (e.x + step < 4 || e.x + step + PHYSICS.ENEMY_W > W - 4) {
-        hit = true; break;
+  
+  if (alive.length > 0) {
+    state.enemyMoveTimer += dt;
+    if (state.enemyMoveTimer >= PHYSICS.ENEMY_MOVE_BASE / (cfg.enemySpeed * speedMul)) {
+      state.enemyMoveTimer = 0;
+      const step = 10 * state.enemyDir;
+      let hit = false;
+      for (const e of alive) {
+        if (e.x + step < 4 || e.x + step + PHYSICS.ENEMY_W > W - 4) {
+          hit = true; break;
+        }
       }
-    }
-    if (hit) {
-      state.enemyDir *= -1;
-      for (const e of alive) e.y += cfg.enemyDropStep;
-    } else {
-      for (const e of alive) e.x += step;
+      if (hit) {
+        state.enemyDir *= -1;
+        for (const e of alive) e.y += cfg.enemyDropStep;
+      } else {
+        for (const e of alive) e.x += step;
+      }
     }
   }
 
@@ -125,8 +205,9 @@ export function update(dt, ts, GameCallbacks) {
 
   // ── Balas inimigas — movimento e colisões ─────────────────
   state.eBullets = state.eBullets.filter(b => {
+    b.x += b.vx || 0;
     b.y += b.vy;
-    if (b.y > H) return false;
+    if (b.y > H || b.y < 0 || b.x < 0 || b.x > W) return false;
 
     // Colisão com jogador
     if (
@@ -183,10 +264,18 @@ export function update(dt, ts, GameCallbacks) {
   }
 
   // ── Vitória ───────────────────────────────────────────────
-  if (alive.length === 0) {
+  if (alive.length === 0 && !state.boss.active) {
     state.score += cfg.bonusPoints || 0;
     GameCallbacks.updateHUD();
-    GameCallbacks.showWaveClear();
+    
+    // Checa se deve spawnar Boss
+    const { BOSS_CONFIGS } = require('./config.js');
+    if (BOSS_CONFIGS[state.wave]) {
+      const { createBoss } = require('./helpers.js');
+      createBoss(state.wave, BOSS_CONFIGS);
+    } else {
+      GameCallbacks.showWaveClear();
+    }
     return;
   }
 

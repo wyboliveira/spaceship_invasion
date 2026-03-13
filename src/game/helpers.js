@@ -70,3 +70,30 @@ export function spawnDrop(x, y, type) {
     frame: 0,
   });
 }
+
+export function createBoss(wave, BOSS_CONFIGS) {
+  const cfg = BOSS_CONFIGS[wave];
+  if (!cfg) return;
+
+  const W = PHYSICS.CANVAS_W;
+  const side = Math.random() < 0.5 ? 'left' : 'right';
+  const startX = side === 'left' ? -PHYSICS.BOSS_W : W;
+  
+  state.boss = {
+    active:     true,
+    introAnim:  true,
+    introStep:  0,
+    side:       side,
+    x:          startX,
+    y:          PHYSICS.ENEMY_START_Y,
+    hp:         cfg.hpMult * (state.cfg?.enemyHP ?? 1),
+    maxHp:      cfg.hpMult * (state.cfg?.enemyHP ?? 1),
+    shield:     cfg.shield || 0,
+    flashTimer: 0,
+    dir:        1,
+    fireTimer:  0,
+    speedMult:  cfg.speedMult || 1.0,
+    weapons:    cfg.weapons || false,
+    neon:       cfg.neon || false
+  };
+}

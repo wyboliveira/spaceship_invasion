@@ -100,6 +100,12 @@ function render() {
     if (e.alive) drawEnemy(ctx, e.x, e.y, e.row, e.hp, e.maxHp, state.frame, e.elite);
   }
 
+  // Boss
+  if (state.boss.active) {
+    const { drawBoss } = require('./game/sprites.js');
+    drawBoss(ctx, state.boss, state.frame, state.wave);
+  }
+
   // Jogador
   if (!state.over) drawPlayer(ctx, state.player.x, state.player.y);
 
@@ -210,6 +216,14 @@ const GameCallbacks = {
         <em>← →</em> MOVER &nbsp; <em>ESPAÇO</em> ATIRAR<br>
         <em>P</em> PAUSAR &nbsp; <em>R</em> REINICIAR
       </div>
+      <div id="bossDebug" style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
+        <div style="font-size:10px; color:#666; margin-bottom:5px;">TESTE DE BOSSES</div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px; justify-content:center;">
+          ${[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(w => `
+            <button class="debug-btn" onclick="Game.jumpToBoss(${w})" style="background:#222; color:#aaa; border:1px solid #444; padding:3px 6px; cursor:pointer; font-size:10px;">W${w}</button>
+          `).join('')}
+        </div>
+      </div>
     `);
     document.getElementById('startBtn').onclick = () => Game.start();
     updateHUD();
@@ -237,6 +251,18 @@ const Game = {
     updateState({ _lastTs: performance.now() });
     _animId = requestAnimationFrame(gameLoop);
   },
+
+  jumpToBoss(wave) {
+    updateState({ score: 0 });
+    hideOverlay();
+    cancelAnimationFrame(_animId);
+    initWave(wave);
+    // Removemos todos os inimigos comuns para spawnar o boss imediatamente na vitória
+    updateState({ enemies: [] });
+    updateHUD();
+    updateState({ _lastTs: performance.now() });
+    _animId = requestAnimationFrame(gameLoop);
+  }
 };
 
 window.Game = Game;

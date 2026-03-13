@@ -230,6 +230,22 @@ export const PHYSICS = {
   SHIELD_BLOCK_HP:  3,
   PARTICLE_GRAVITY: 0.1,
   PARTICLE_DECAY:   0.028,
+
+  BOSS_W:           119, // ~3.5x regular ENEMY_W (34 * 3.5)
+  BOSS_H:           102, // ~3.5x regular ENEMY_H (29 * 3.5)
+};
+
+export const BOSS_CONFIGS = {
+  10:  { hpMult: 10, speedMult: 1.0, shield: 0, weapons: false },
+  20:  { hpMult: 12, speedMult: 1.0, shield: 0, weapons: false },
+  30:  { hpMult: 14, speedMult: 1.0, shield: 0, weapons: false },
+  40:  { hpMult: 15, speedMult: 1.0, shield: 0, weapons: false },
+  50:  { hpMult: 16, speedMult: 1.0, shield: 5, weapons: false },
+  60:  { hpMult: 16, speedMult: 1.0, shield: 5, weapons: false },
+  70:  { hpMult: 20, speedMult: 1.2, shield: 0, weapons: true },
+  80:  { hpMult: 20, speedMult: 1.2, shield: 0, weapons: true },
+  90:  { hpMult: 20, speedMult: 1.2, shield: 0, weapons: true },
+  100: { hpMult: 22, speedMult: 1.2, shield: 0, weapons: true, neon: true },
 };
 
 export const VISUAL = {

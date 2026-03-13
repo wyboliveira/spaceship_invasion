@@ -19,7 +19,20 @@ export let state = {
   paused: false,
   over: false,
   _lastTs: 0,
-  score: 0
+  score: 0,
+  boss: {
+    active: false,
+    introAnim: false,
+    introStep: 0,
+    x: 0,
+    y: 0,
+    hp: 0,
+    maxHp: 0,
+    shield: 0,
+    flashTimer: 0,
+    dir: 1,
+    fireTimer: 0
+  }
 };
 
 export function updateState(newState) {
