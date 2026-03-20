@@ -121,6 +121,9 @@ describe('Drop System & Magnet', () => {
     // Na primeira passagem (inimigos == 0, drops > 0), a flag DEVE ser ativada
     expect(state.postWaveMagnet).toBe(true);
 
+    // Na segunda passagem, o ímã atua sobre o drop
+    update(16, 1000, mockCallbacks);
+
     // O item também deve ter seu vetor apontado para a nave
     // (player no x:100, item no x:10, então x deve aumentar positivamente proximo a 12)
     const d = state.drops[0];
@@ -128,3 +131,4 @@ describe('Drop System & Magnet', () => {
     expect(d.y).toBeGreaterThan(10);
   });
 });
+

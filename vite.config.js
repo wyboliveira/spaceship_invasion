@@ -7,5 +7,17 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+  },
+  test: {
+    environment: 'jsdom',
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
+    },
+    // Desativar threads ajuda na estabilidade do process.env e window no Windows
+    threads: false, 
   }
 });
+

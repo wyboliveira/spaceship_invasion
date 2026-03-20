@@ -1,7 +1,7 @@
 // ── Estado Global do Jogo ─────────────────────────────────────
 // Mantém as variáveis dinâmicas da partida atual. Este objeto é mutável
 // e lido por todo o game loop (update, render, etc).
-export let state = {
+export const state = {
   cfg: null,             // Configuração atual da wave (vida, velocidade, etc)
   wave: 0,               // Número da onda (fase) atual
   lives: 0,              // Vidas restantes do jogador
@@ -42,20 +42,27 @@ export let state = {
     flashTimer: 0,       // Flash branco ao tomar dano
     dir: 1,
     fireTimer: 0
-  }
+  },
+  
+  // Dados de Autenticação e Perfil
+  session: null,         // Sessão atual do Supabase
+  userProfile: null      // Perfil recuperado da tabela public.profiles
 };
 
 /**
  * Atualiza propriedades específicas do estado sem sobrescrever o objeto todo.
- * @param {Object} newState Variáveis a atualizar (ex: { score: 100 })
+ * @param {Object} newState - Variáveis a atualizar (ex: { score: 100 })
  */
 export function updateState(newState) {
-  state = { ...state, ...newState };
+  Object.assign(state, newState);
 }
 
 /**
- * Zera o estado para um valor base (apenas usado no bootstrap total caso necessário).
+ * Zera o estado para um valor base.
+ * @param {Object} baseState - O novo estado base completo.
  */
 export function resetState(baseState) {
-    state = { ...baseState };
+    // Limpa propriedades mantendo a referência
+    for (const key in state) delete state[key];
+    Object.assign(state, baseState);
 }

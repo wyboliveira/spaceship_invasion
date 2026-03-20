@@ -19,7 +19,11 @@ export function initInput(GameCallbacks) {
         
         // Atalhos de jogo globais
         if (e.code === 'KeyP' && state.cfg) GameCallbacks.togglePause();
-        if (e.code === 'KeyR') GameCallbacks.reset();
+        if (e.code === 'KeyR') {
+            GameCallbacks.showConfirm('DESEJA REINICIAR A PARTIDA? (O PROGRESSO ATUAL SERÁ SALVO)', () => {
+                GameCallbacks.reset();
+            });
+        }
         
         // Se a partida tiver acabado, Enter ou NumpadEnter avança o menu
         if ((e.code === 'Enter' || e.code === 'NumpadEnter') && state.over && !state.paused) {

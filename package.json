@@ -10,8 +10,12 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^1.0.0",
+    "jsdom": "^29.0.0",
     "vite": "^5.0.0",
-    "vitest": "^1.0.0",
-    "@vitest/coverage-v8": "^1.0.0"
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.2"
   }
 }

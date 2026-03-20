@@ -11,6 +11,12 @@ import {
 } from './game/sprites.js';
 import { updateHUD } from './ui/hud.js';
 import { showOverlay, hideOverlay } from './ui/overlay.js';
+import { supabase } from './lib/supabase.js';
+import { 
+  signInWithGoogle, signInWithGithub, signOut, 
+  getUserProfile, updateMaxScore, clearUserHistory, 
+  processPendingResets 
+} from './api/auth.js';
 
 const gameCanvas = document.getElementById('gameCanvas');
 const bgCanvas   = document.getElementById('bgCanvas');
@@ -158,6 +164,7 @@ function render() {
 
 // ── Game Loop ─────────────────────────────────────────────────
 let _animId = null;
+let _lastSyncedScore = -1; // Rastreia o último score sincronizado para evitar duplicidade
 
 function gameLoop(ts) {
   if (state.paused || state.over) return;
@@ -169,21 +176,41 @@ function gameLoop(ts) {
 }
 
 // ── Callbacks ─────────────────────────────────────────────────
+/**
+ * Objeto centralizador de Callbacks.
+ * Permite que o motor do jogo (update.js) acione eventos de UI sem acoplamento direto.
+ */
 const GameCallbacks = {
+  /** Atualiza o HUD com os valores atuais de score, onda e vidas. */
   updateHUD,
 
+  /** 
+   * Trata o fim de jogo por morte ou invasão.
+   * Salva o progresso no Supabase e exibe o overlay de Game Over.
+   */
   triggerGameOver: () => {
     updateState({ over: true });
     cancelAnimationFrame(_animId);
+    
+    // Sincronização automática em background se houver sessão ativa
+    if (state.session && state.score !== _lastSyncedScore) {
+      _lastSyncedScore = state.score;
+      updateMaxScore(state.session.user.id, state.score, state.wave);
+    }
+
     setTimeout(() => {
       showOverlay(`
         <div class="overlay-title" style="color:var(--accent2)">GAME OVER</div>
         <div class="overlay-sub">
           SCORE ${String(state.score).padStart(6, '0')} — WAVE ${String(state.wave).padStart(2, '0')}
         </div>
-        <button class="press-start" id="restartBtn">TENTAR NOVAMENTE</button>
+        <div style="display:flex; flex-direction:column; gap:10px; align-items:center;">
+          <button class="press-start" id="restartBtn">TENTAR NOVAMENTE</button>
+          <button class="press-start" id="backToMenuBtn" style="background:#444; color:#fff; border-color:#666; font-size:10px; height:auto; padding:10px 20px;">VOLTAR AO MENU</button>
+        </div>
       `);
       document.getElementById('restartBtn').onclick = () => Game.start();
+      document.getElementById('backToMenuBtn').onclick = () => GameCallbacks.reset();
     }, 600);
   },
 
@@ -191,17 +218,30 @@ const GameCallbacks = {
     updateState({ over: true });
     cancelAnimationFrame(_animId);
     const next = state.wave + 1;
+    // Salva progresso em background (Persistence background sync)
+    if (state.session && state.score !== _lastSyncedScore) {
+      _lastSyncedScore = state.score;
+      updateMaxScore(state.session.user.id, state.score, state.wave);
+    }
+
     setTimeout(() => {
-      showOverlay(`
-        <div class="overlay-title" style="color:var(--green)">WAVE CLEAR</div>
-        <div class="overlay-sub">
-          BONUS +${(state.cfg.bonusPoints || 0).toLocaleString()} pts &nbsp;|&nbsp;
-          SCORE ${String(state.score).padStart(6, '0')}
-        </div>
-        <button class="press-start" id="nextWaveBtn">WAVE ${String(next).padStart(2, '0')} &rarr;</button>
-      `);
-      document.getElementById('nextWaveBtn').onclick = () => Game.nextWave();
-    }, 400);
+      try {
+        showOverlay(`
+          <div class="overlay-title" style="color:var(--green)">WAVE CLEAR</div>
+          <div class="overlay-sub">
+            BONUS +${(state.cfg?.bonusPoints || 0).toLocaleString()} pts &nbsp;|&nbsp;
+            SCORE ${String(state.score).padStart(6, '0')}
+          </div>
+          <button class="press-start" id="nextWaveBtn">WAVE ${String(next).padStart(2, '0')} &rarr;</button>
+        `);
+        document.getElementById('nextWaveBtn').onclick = () => {
+          hideOverlay();
+          Game.nextWave();
+        };
+      } catch (e) {
+        console.error("[UI Error] Error showing Wave Clear overlay:", e);
+      }
+    }, 600);
   },
 
   showBossTestComplete: (wave) => {
@@ -231,19 +271,77 @@ const GameCallbacks = {
     if (state.over) return;
     const paused = !state.paused;
     updateState({ paused });
-    if (!paused) {
+    
+    const indicator = document.getElementById('pauseIndicator');
+    if (paused) {
+      indicator.classList.remove('hidden');
+    } else {
+      indicator.classList.add('hidden');
       updateState({ _lastTs: performance.now() });
       requestAnimationFrame(gameLoop);
     }
   },
 
+  /**
+   * Reseta o jogo para o estado inicial de menu.
+   * Garante a persistência do score atual antes de limpar o estado.
+   */
   reset: () => {
+    // Evita recursão e garante que o resto do código saiba que estamos no menu
+    const wasOver = state.over;
+    const wasWave0 = state.wave === 0;
+
+    // Salva progresso em background antes de resetar (caso não tenha sido salvo no GameOver)
+    if (state.session && state.score > 0 && state.score !== _lastSyncedScore) {
+      _lastSyncedScore = state.score;
+      updateMaxScore(state.session.user.id, state.score, state.wave).catch(e => console.error("[Sync] Erro ao salvar no reset:", e));
+    }
+
     cancelAnimationFrame(_animId);
-    updateState({ score: 0 });
+    updateState({ score: 0, paused: false, over: true, wave: 0 });
+    document.getElementById('pauseIndicator').classList.add('hidden');
+
+    const username = state.session 
+      ? (state.userProfile?.username || state.session.user.email.split('@')[0])
+      : 'GUEST';
+
+    const authContent = state.session ? `
+      <div style="margin-bottom:20px; text-align:center;">
+        <div style="font-size:18px; color:#00ff88; margin-bottom:10px;">USER: ${username.toUpperCase()}</div>
+        
+        <div style="font-size:11px; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px;">RECORDS</div>
+        <div style="font-size:13px; color:#FFD700; display:flex; gap:15px; justify-content:center; font-weight:bold; margin-bottom:15px;">
+          <span>MAX SCORE: ${state.userProfile?.max_score || 0}</span>
+          <span>MAX WAVE: ${state.userProfile?.max_wave || 0}</span>
+        </div>
+
+        <div style="font-size:11px; color:#aaa; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px;">LAST GAME</div>
+        <div style="font-size:13px; color:#00ddff; display:flex; gap:15px; justify-content:center; font-weight:bold; margin-bottom:15px;">
+          <span>YOUR LAST SCORE: ${state.userProfile?.last_score || 0}</span>
+          <span>WAVES COMPLETED: ${state.userProfile?.last_wave || 0}</span>
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:center;">
+          <button class="press-start" id="logoutBtn" style="font-size:10px; padding:5px 15px; background:#ff4444; border:none; height:auto; line-height:1; opacity:0.8;">SAIR</button>
+          <button class="press-start" id="clearHistoryBtn" style="font-size:10px; padding:5px 15px; background:#444; border:1px solid #666; color:#aaa; height:auto; line-height:1; opacity:0.8;">ZERAR HISTÓRICO</button>
+        </div>
+      </div>
+    ` : `
+      <div style="margin-bottom:20px; text-align:center;">
+        <div style="font-size:10px; color:#666; margin-bottom:10px;">CONECTAR CONTA</div>
+        <div style="display:flex; gap:10px; justify-content:center;">
+          <button class="press-start" id="loginGoogleBtn" style="font-size:10px; padding:8px 12px; margin:0; background:#4285F4; border:none; height:auto; line-height:1;">GOOGLE</button>
+          <button class="press-start" id="loginGithubBtn" style="font-size:10px; padding:8px 12px; margin:0; background:#333; border:none; height:auto; line-height:1;">GITHUB</button>
+        </div>
+      </div>
+    `;
+
     showOverlay(`
       <div class="overlay-title" style="color:var(--accent)">SPACESHIP</div>
       <div class="overlay-title" style="color:var(--accent);margin-top:-20px">INVASION</div>
-      <div class="overlay-sub">dev edition — v1.0.0</div>
+      
+      ${authContent}
+
       <button class="press-start" id="startBtn">PRESS START</button>
       <div class="overlay-hint" style="margin-top:12px">
         <em>← →</em> MOVER &nbsp; <em>ESPAÇO</em> ATIRAR<br>
@@ -258,16 +356,166 @@ const GameCallbacks = {
         </div>
       </div>
     `);
+    
     document.getElementById('startBtn').onclick = () => Game.start();
+    
+    if (state.session) {
+      const logoutBtn = document.getElementById('logoutBtn');
+      if (logoutBtn) {
+        logoutBtn.onclick = async (e) => {
+          e.stopPropagation();
+          GameCallbacks.showConfirm('DESEJA REALMENTE SAIR?', async () => {
+            try {
+              const okBtn = document.getElementById('confirmOkBtn');
+              const cancelBtn = document.getElementById('confirmCancelBtn');
+              if (okBtn) { okBtn.disabled = true; okBtn.textContent = 'SAINDO...'; }
+              if (cancelBtn) cancelBtn.style.display = 'none';
+              
+              // Tenta salvar o último progresso antes de fechar a sessão
+              if (state.score > 0) {
+                await updateMaxScore(state.session.user.id, state.score, state.wave);
+              }
+              
+              await signOut();
+              // O reset() virá pelo onAuthStateChange, mas forçamos aqui por segurança
+              GameCallbacks.reset(); 
+            } catch (err) {
+              console.error("[Logout] Failed:", err);
+              updateState({ session: null, userProfile: null });
+              GameCallbacks.reset();
+            }
+          }, () => {
+            GameCallbacks.reset();
+          });
+        };
+      }
+
+      const clearBtn = document.getElementById('clearHistoryBtn');
+      if (clearBtn) {
+        clearBtn.onclick = (e) => {
+          e.stopPropagation();
+          GameCallbacks.showConfirm('TEM CERTEZA QUE DESEJA ZERAR OS DADOS?<br>NÃO HAVERÁ COMO RECUPERAR O REGISTRO', async () => {
+            try {
+              const okBtn = document.getElementById('confirmOkBtn');
+              const cancelBtn = document.getElementById('confirmCancelBtn');
+              if (okBtn) { okBtn.disabled = true; okBtn.textContent = 'ZERANDO...'; }
+              if (cancelBtn) cancelBtn.style.display = 'none';
+
+              await clearUserHistory(state.session.user.id);
+            } catch (err) {
+              console.error("[History] Error clearing:", err);
+            } finally {
+              GameCallbacks.reset(); // Re-renderiza o menu para mostrar os zeros e destravar o botão
+            }
+          }, () => {
+            GameCallbacks.reset();
+          });
+        };
+      }
+    } else {
+      const gBtn = document.getElementById('loginGoogleBtn');
+      const ghBtn = document.getElementById('loginGithubBtn');
+      if (gBtn) gBtn.onclick = () => signInWithGoogle();
+      if (ghBtn) ghBtn.onclick = () => signInWithGithub();
+    }
+
     updateHUD();
   },
+
+  /**
+   * Exibe uma caixa de diálogo de confirmação personalizada (Overlay).
+   * @param {string} message - Mensagem (HTML aceito) a ser exibida.
+   * @param {Function} onOk - Callback executado ao clicar em OK.
+   * @param {Function} onCancel - Callback opcional executado ao clicar em CANCELAR.
+   */
+  showConfirm: (message, onOk, onCancel) => {
+    // Pausa o jogo automaticamente se estiver em execução
+    const wasPaused = state.paused;
+    if (!state.over && !wasPaused) GameCallbacks.togglePause();
+
+    showOverlay(`
+      <div class="overlay-title" style="color:var(--accent); font-size:20px; margin-bottom:15px;">CONFIRMAÇÃO</div>
+      <div class="overlay-sub" style="color:#fff; margin-bottom:25px; font-size:16px;">${message}</div>
+      <div style="display:flex; gap:15px; justify-content:center;">
+        <button class="press-start" id="confirmOkBtn" style="background:var(--accent); color:#000; min-width:100px; font-size: 10px; padding: 8px 20px;">OK</button>
+        <button class="press-start" id="confirmCancelBtn" style="border-color:#666; color:#666; min-width:100px; font-size: 10px; padding: 8px 20px;">CANCELAR</button>
+      </div>
+    `);
+
+    const okBtn = document.getElementById('confirmOkBtn');
+    const cancelBtn = document.getElementById('confirmCancelBtn');
+
+    // Foca no botão OK para que ENTER funcione imediatamente
+    setTimeout(() => okBtn.focus(), 10);
+
+    okBtn.onclick = async () => {
+      if (onOk) {
+        await onOk();
+      }
+      
+      // Se após o callback ainda estivermos com o overlay de confirmação (ou se ele não mostrou o menu), fechamos.
+      // No caso do reset(), o showOverlay() lá já terá substituído o conteúdo, então hideOverlay() aqui
+      // só deve ser chamado se o callback NÃO abriu outra coisa.
+      // Como não temos um jeito fácil de checar o conteúdo do innerHTML de forma limpa, 
+      // vamos apenas fechar se não estivermos no menu principal.
+      if (!state.over || state.wave !== 0) {
+        hideOverlay();
+      }
+    };
+
+    cancelBtn.onclick = () => {
+      hideOverlay();
+      if (onCancel) {
+        onCancel();
+      } else if (!state.over && !wasPaused) {
+        // Se cancelou e o jogo estava rodando, despausa
+        GameCallbacks.togglePause();
+      }
+    };
+  }
 };
 
+// ── Listener de Autenticação Reativo ──────────────────────────
+supabase.auth.onAuthStateChange(async (event, session) => {
+  console.log('[Auth] State change event:', event);
+  const oldSessionId = state.session?.user?.id;
+  updateState({ session });
+  
+  if (session) {
+    const profile = await getUserProfile(session.user.id);
+    updateState({ userProfile: profile });
+    // Verifica se há limpezas de histórico pendentes para este usuário
+    processPendingResets();
+  } else {
+    updateState({ userProfile: null });
+  }
+  
+  updateHUD();
+
+  // Só re-renderiza o menu se o evento for relevante e estivermos tecnicamente no menu ou acabamos de sair
+  const isLogout = event === 'SIGNED_OUT' || (oldSessionId && !session);
+  const isLogin = event === 'SIGNED_IN' && !oldSessionId;
+
+  if (state.over && (state.wave === 0 || isLogout || isLogin)) {
+    // Se o overlay sumiu ou se o evento de auth mudou no menu, redesenhamos
+    GameCallbacks.reset();
+  }
+});
+
+// Listener extra para garantir reset quando forçado manualmente
+window.addEventListener('auth-status-changed', () => {
+  if (state.over && state.wave === 0) GameCallbacks.reset();
+});
+
+// ── Inicialização Final ──────────────────────────────────────
+// A lógica de inicialização agora está concentrada no final do arquivo.
 // ── API Pública ───────────────────────────────────────────────
 const Game = {
   start() {
-    updateState({ score: 0 });
+    _lastSyncedScore = -1; // Reseta o rastreio para a nova partida
+    updateState({ score: 0, paused: false });
     hideOverlay();
+    document.getElementById('pauseIndicator').classList.add('hidden');
     cancelAnimationFrame(_animId);
     initWave(1);
     updateHUD();
@@ -277,7 +525,9 @@ const Game = {
 
   nextWave() {
     const next = state.wave + 1;
+    updateState({ paused: false });
     hideOverlay();
+    document.getElementById('pauseIndicator').classList.add('hidden');
     cancelAnimationFrame(_animId);
     initWave(next, state.lives, state.weaponLevel);
     updateHUD();
@@ -321,3 +571,4 @@ window.GameTest = {
 
 initInput(GameCallbacks);
 GameCallbacks.reset();
+processPendingResets(); // Sincroniza limpezas pendentes no boot

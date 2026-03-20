@@ -11,8 +11,13 @@
 </head>
 <body>
 <div class="game-wrapper">
+  <div id="pauseIndicator" class="hidden" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; font-family: 'Orbitron', sans-serif; font-size: 3rem; color: var(--accent3); text-shadow: 0 0 20px var(--accent3); pointer-events: none; letter-spacing: 12px; font-weight: 900; background: rgba(0,0,0,0.4); padding: 20px 40px; border-radius: 10px;">PAUSED</div>
 
   <div class="hud">
+    <div class="hud-block left" style="min-width: 150px;">
+      <div class="hud-label">player</div>
+      <div class="hud-value" id="userDisplay" style="color:var(--accent2)">guest</div>
+    </div>
     <div class="hud-block">
       <div class="hud-label">score</div>
       <div class="hud-value" id="scoreDisplay">000000</div>
@@ -40,6 +45,9 @@
     <span><em>espaço</em> atirar</span>
     <span><em>P</em> pausa</span>
     <span><em>R</em> reiniciar</span>
+  </div>
+  <div class="version-tag" style="font-size: 0.75rem; color: var(--dim); opacity: 0.5; margin-top: 4px; letter-spacing: 2px;">
+    dev edition — v1.0.0
   </div>
 
 </div>
