@@ -1,68 +1,70 @@
-// ── Estado Global do Jogo ─────────────────────────────────────
-// Mantém as variáveis dinâmicas da partida atual. Este objeto é mutável
-// e lido por todo o game loop (update, render, etc).
+/**
+ * state.js — Estado global do jogo
+ * Objeto mutável lido pelo game loop (update, render).
+ * Modificado exclusivamente via updateState() ou resetState().
+ *
+ * Não contém lógica de navegação nem de I/O — apenas dados.
+ */
+
 export const state = {
-  cfg: null,             // Configuração atual da wave (vida, velocidade, etc)
-  wave: 0,               // Número da onda (fase) atual
-  lives: 0,              // Vidas restantes do jogador
-  player: { x: 0, y: 0, w: 0, h: 0 }, // Posição geométrica do jogador
-  weaponLevel: 1,        // Nível atual da arma (1 = tiro simples, 5 = espalhado)
-  
-  bullets: [],           // Array de tiros disparados pelo jogador
-  eBullets: [],          // Array de tiros disparados pelos inimigos/boss
-  enemies: [],           // Array de inimigos comuns vivos na tela
-  shields: [],           // Array de blocos de escudo de defesa do jogador
-  drops: [],             // Array de itens (coração, arma) caindo na tela
-  particles: [],         // Efeitos visuais (explosões, faíscas)
-  
-  enemyDir: 1,           // Direção de movimento dos inimigos (1 = direita, -1 = esquerda)
-  enemyMoveTimer: 0,     // Temporizador para o passo lateral/descida dos inimigos
-  enemyFireTimer: 0,     // Temporizador global para controle de cadência inimiga
-  
-  frame: 0,              // Contador de frames (usado em animações de sprite)
-  flashTimer: 0,         // Temporizador do efeito de tela piscando vermelho (quando o jogador toma dano)
-  lastFire: 0,           // Timestamp do último tiro disparado pelo jogador (cooldown)
-  
-  paused: false,         // Flag se o jogo está pausado
-  over: false,           // Flag se o jogo terminou (game over ou wave clear)
-  postWaveMagnet: false, // Flag se a fase acabou mas ainda está sugando os drops restantes
-  _lastTs: 0,            // Timestamp do último frame renderizado (para cálculo de Delta Time - dt)
-  score: 0,              // Pontuação acumulada
-  
-  // Dados do Chefão (quando aplicável na wave múltipla de 10)
+  // ── Wave atual ──────────────────────────────────────────────
+  cfg:          null,    // Configuração da wave (getWaveConfig)
+  wave:         0,
+  lives:        0,
+  score:        0,
+  weaponLevel:  1,
+
+  // ── Entidades ────────────────────────────────────────────────
+  player:    { x: 0, y: 0, w: 0, h: 0 },
+  bullets:   [],
+  eBullets:  [],
+  enemies:   [],
+  shields:   [],
+  drops:     [],
+  particles: [],
+
+  // ── Timers e flags do loop ───────────────────────────────────
+  enemyDir:        1,
+  enemyMoveTimer:  0,
+  enemyFireTimer:  0,
+  frame:           0,
+  flashTimer:      0,
+  lastFire:        0,
+  _lastTs:         0,
+  paused:          false,
+  over:            true,
+  postWaveMagnet:  false,
+  isBossDebugRun:  false,
+
+  // ── Boss ─────────────────────────────────────────────────────
   boss: {
-    active: false,       // O boss está presente na tela?
-    introAnim: false,    // O boss está executando animação de entrada?
-    introStep: 0,
-    x: 0,
-    y: 0,
-    hp: 0,               // Vida atual
-    maxHp: 0,            // Vida total
-    shield: 0,           // Escudo extra
-    flashTimer: 0,       // Flash branco ao tomar dano
-    dir: 1,
-    fireTimer: 0
+    active: false, introAnim: false, introStep: 0,
+    x: 0, y: 0, side: 'left',
+    hp: 0, maxHp: 0, shield: 0,
+    flashTimer: 0, dir: 1, fireTimer: 0,
+    speedMult: 1, weapons: false, neon: false,
   },
-  
-  // Dados de Autenticação e Perfil
-  session: null,         // Sessão atual do Supabase
-  userProfile: null      // Perfil recuperado da tabela public.profiles
+
+  // ── Auth / Perfil ────────────────────────────────────────────
+  session:     null,
+  userProfile: null,
+  syncError:   null,
 };
 
 /**
- * Atualiza propriedades específicas do estado sem sobrescrever o objeto todo.
- * @param {Object} newState - Variáveis a atualizar (ex: { score: 100 })
+ * Atualiza propriedades específicas mantendo a referência do objeto.
+ * @param {Object} patch
  */
-export function updateState(newState) {
-  Object.assign(state, newState);
+export function updateState(patch) {
+  Object.assign(state, patch);
 }
 
 /**
- * Zera o estado para um valor base.
- * @param {Object} baseState - O novo estado base completo.
+ * Substitui todo o estado por um novo objeto base.
+ * Mantém a referência do objeto (não quebra imports).
+ * @param {Object} baseState
  */
 export function resetState(baseState) {
-    // Limpa propriedades mantendo a referência
-    for (const key in state) delete state[key];
-    Object.assign(state, baseState);
+  for (const key in state) delete state[key];
+  Object.assign(state, baseState);
 }

@@ -76,14 +76,23 @@ body::before {
 #bgCanvas   { z-index: 0; }
 #gameCanvas { z-index: 1; cursor: none; }
 
-#overlay {
+.ui-screen {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   background: rgba(0,0,0,0.88);
   z-index: 10; gap: 8px;
 }
-#overlay.hidden { display: none; }
+.ui-screen.hidden { display: none !important; }
+
+.ui-modal {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.92);
+  z-index: 100; gap: 8px;
+}
+.ui-modal.hidden { display: none !important; }
 
 .overlay-title {
   font-family: 'Orbitron', monospace;

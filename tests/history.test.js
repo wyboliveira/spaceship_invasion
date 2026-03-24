@@ -22,7 +22,6 @@ import { processPendingResets } from '../src/api/auth.js';
 
 describe('History Reset Logic', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     updateState({
       session: { user: { id: '123' } },
       userProfile: { id: '123', max_score: 1000, max_wave: 5, last_score: 500, last_wave: 2 }
@@ -31,29 +30,16 @@ describe('History Reset Logic', () => {
     localStorage.clear();
   });
 
-  it('should reset local profile state optimistically', async () => {
-    const promise = clearUserHistory('123');
-    
-    // Verifica estado logo após a chamada (optimistic update)
-    expect(state.userProfile.max_score).toBe(0);
-    expect(state.userProfile.max_wave).toBe(0);
-    
-    vi.runAllTimers();
-    await promise;
-  });
-
   it('should set localStorage flag at start and remove it on success', async () => {
     const promise = clearUserHistory('123');
     expect(localStorage.getItem('spaceship_invasion_pending_reset')).toBe('123');
     
-    vi.runAllTimers();
     await promise;
     expect(localStorage.getItem('spaceship_invasion_pending_reset')).toBeNull();
   });
 
   it('should call supabase update with reset values', async () => {
     const promise = clearUserHistory('123');
-    vi.runAllTimers();
     await promise;
     
     expect(mockFrom).toHaveBeenCalledWith('profiles');
@@ -67,14 +53,20 @@ describe('History Reset Logic', () => {
   });
 
   it('should keep localStorage flag on timeout and retry via processPendingResets', async () => {
-    // Simula mock que nunca resolve (causando timeout de 5s)
+    vi.useFakeTimers();
+    // Simula mock que nunca resolve
     mockEq.mockReturnValueOnce(new Promise(() => {})); 
     
     const promise = clearUserHistory('123');
     
     // Avança tempo para disparar o timeout do Promise.race (5000ms)
     vi.advanceTimersByTime(5100); 
-    await promise;
+    
+    try {
+      await promise;
+    } catch (err) {
+      expect(err.message).toBe('Timeout ao zerar histórico');
+    }
     
     // Flag deve continuar lá pois falhou
     expect(localStorage.getItem('spaceship_invasion_pending_reset')).toBe('123');

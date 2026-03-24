@@ -4,8 +4,9 @@ import { keys } from './input.js';
 import { enemyColor } from './sprites.js';
 import { spawnParticles, spawnDrop, createBoss } from './helpers.js';
 import { getBulletPattern, applyWeaponPenalty, resolveDropType } from './weapons.js';
+import { EventBus } from '../core/EventBus.js';
 
-export function update(dt, ts, GameCallbacks) {
+export function update(dt, ts) {
   const cfg = state.cfg;
   if (!cfg) return;
 
@@ -77,12 +78,12 @@ export function update(dt, ts, GameCallbacks) {
           boss.active = false;
           state.score += 5000 * (state.wave / 10);
           spawnParticles(boss.x + PHYSICS.BOSS_W/2, boss.y + PHYSICS.BOSS_H/2, boss.neon ? '#00ffff' : '#ff0044', 40);
-          GameCallbacks.updateHUD();
+          EventBus.emit('GAME_UPDATE_HUD');
           // Se foi iniciado pelo debug de boss, mostra mensagem especial
           if (state.isBossDebugRun) {
-            GameCallbacks.showBossTestComplete(state.wave);
+            EventBus.emit('GAME_BOSS_TEST_COMPLETE', state.wave);
           } else {
-            GameCallbacks.showWaveClear();
+            EventBus.emit('GAME_WAVE_CLEAR');
           }
         }
 
@@ -116,7 +117,7 @@ export function update(dt, ts, GameCallbacks) {
           spawnParticles(e.x + 13, e.y + 11, col, 5);
         }
 
-        GameCallbacks.updateHUD();
+        EventBus.emit('GAME_UPDATE_HUD');
         return false;
       }
     }
@@ -223,7 +224,7 @@ export function update(dt, ts, GameCallbacks) {
       b.x > state.player.x + 4 && b.x < state.player.x + state.player.w - 4 &&
       b.y > state.player.y     && b.y < state.player.y + state.player.h
     ) {
-      onPlayerHit(GameCallbacks);
+      onPlayerHit();
       return false;
     }
 
@@ -271,7 +272,7 @@ export function update(dt, ts, GameCallbacks) {
       drop.x > state.player.x - 16 && drop.x < state.player.x + state.player.w + 16 &&
       drop.y > state.player.y       && drop.y < state.player.y + state.player.h
     ) {
-      collectDrop(drop, GameCallbacks);
+      collectDrop(drop);
       return false;
     }
 
@@ -281,7 +282,7 @@ export function update(dt, ts, GameCallbacks) {
   // ── Derrota por invasão ───────────────────────────────────
   for (const e of alive) {
     if (e.y + PHYSICS.ENEMY_H >= state.player.y) {
-      GameCallbacks.triggerGameOver();
+      EventBus.emit('GAME_OVER');
       return;
     }
   }
@@ -295,13 +296,13 @@ export function update(dt, ts, GameCallbacks) {
       // Tudo coletado (ou não haviam drops), prossiga com Wave Clear normalmente
       state.postWaveMagnet = false;
       state.score += cfg.bonusPoints || 0;
-      GameCallbacks.updateHUD();
+      EventBus.emit('GAME_UPDATE_HUD');
 
       // Checa se deve spawnar Boss (a cada 10 fases)
       if (BOSS_CONFIGS[state.wave]) {
         createBoss(state.wave, BOSS_CONFIGS);
       } else {
-        GameCallbacks.showWaveClear();
+        EventBus.emit('GAME_WAVE_CLEAR');
       }
       return;
     }
@@ -319,22 +320,22 @@ export function update(dt, ts, GameCallbacks) {
   if (state.flashTimer > 0) state.flashTimer -= dt;
 }
 
-function onPlayerHit(GameCallbacks) {
+function onPlayerHit() {
   state.lives--;
   state.flashTimer = VISUAL.HIT_FLASH_DURATION;
   state.weaponLevel = applyWeaponPenalty(state.weaponLevel);
 
   spawnParticles(state.player.x + 13, state.player.y + 14, VISUAL.COLOR_PARTICLE_PLR, 20);
-  GameCallbacks.updateHUD();
+  EventBus.emit('GAME_UPDATE_HUD');
 
   if (state.lives <= 0) {
-    GameCallbacks.triggerGameOver();
+    EventBus.emit('GAME_OVER');
   } else {
     state.player.x = PHYSICS.CANVAS_W / 2 - PHYSICS.PLAYER_W / 2;
   }
 }
 
-function collectDrop(drop, GameCallbacks) {
+function collectDrop(drop) {
   if (drop.type === 'weapon') {
     if (state.weaponLevel < WEAPON.MAX_LEVEL) {
       state.weaponLevel++;
@@ -349,5 +350,5 @@ function collectDrop(drop, GameCallbacks) {
       state.score += SCORING.DROP_HEART_BONUS;
     }
   }
-  GameCallbacks.updateHUD();
+  EventBus.emit('GAME_UPDATE_HUD');
 }

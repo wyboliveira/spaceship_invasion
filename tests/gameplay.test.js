@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { getBulletPattern } from '../src/game/weapons.js';
-import { getWaveConfig, WAVE_BANDS } from '../src/game/config.js';
+import { describe, it, expect, vi } from 'vitest';
+import { getBulletPattern, resolveDropType } from '../src/game/weapons.js';
+import { getWaveConfig, WAVE_BANDS, PHYSICS, WEAPON } from '../src/game/config.js';
+import { update } from '../src/game/update.js';
+import { state, resetState } from '../src/game/state.js';
+import { EventBus } from '../src/core/EventBus.js';
 
 describe('Weapon Systems', () => {
   it('should generate a single straight bullet for level 1', () => {
@@ -43,7 +46,6 @@ describe('Collision Logic', () => {
   // We can't easily test the full update loop in a unit test without mocking the whole state,
   // but we can verify that the PHYSICS.SHIELD_BLOCK_SZ is correctly used conceptually.
   it('should use 13 as shield block size', () => {
-    const { PHYSICS } = require('../src/game/config.js');
     expect(PHYSICS.SHIELD_BLOCK_SZ).toBe(13);
   });
 });
@@ -73,7 +75,6 @@ describe('Wave Configuration', () => {
 
 describe('Drop System & Magnet', () => {
   it('should have a chance to drop hearts regardless of level', () => {
-    const { resolveDropType } = require('../src/game/weapons.js');
     // Força level 1, se executarmos 100 vezes, alguns devem ser 'heart' (aprox 25%)
     let hearts = 0;
     for (let i = 0; i < 100; i++) {
@@ -84,17 +85,16 @@ describe('Drop System & Magnet', () => {
   });
 
   it('should forcefully drop hearts if weapon is maxed out', () => {
-    const { resolveDropType } = require('../src/game/weapons.js');
-    const { WEAPON } = require('../src/game/config.js');
     for (let i = 0; i < 50; i++) {
        expect(resolveDropType(WEAPON.MAX_LEVEL)).toBe('heart');
     }
   });
 
   it('should enable postWaveMagnet if enemies are dead but drops exist', () => {
-    const { update } = require('../src/game/update.js');
-    const { state, resetState } = require('../src/game/state.js');
-    
+    let hudEmitted = false;
+    const handler = () => { hudEmitted = true; };
+    EventBus.on('GAME_UPDATE_HUD', handler);
+
     // Mock the state
     resetState({
       cfg: getWaveConfig(1),
@@ -107,28 +107,55 @@ describe('Drop System & Magnet', () => {
       eBullets: [],
       shields: [],
       particles: [],
-      postWaveMagnet: false
+      postWaveMagnet: false,
+      over: false,
+      paused: false
     });
 
-    const mockCallbacks = {
-      updateHUD: () => {},
-      showWaveClear: () => {},
-      triggerGameOver: () => {}
-    };
-
-    update(16, 1000, mockCallbacks);
+    update(16, 1000);
 
     // Na primeira passagem (inimigos == 0, drops > 0), a flag DEVE ser ativada
     expect(state.postWaveMagnet).toBe(true);
+    // GAME_UPDATE_HUD não é disparado se entrar no ímã (só no else do Wave Clear)
+    expect(hudEmitted).toBe(false);
 
     // Na segunda passagem, o ímã atua sobre o drop
-    update(16, 1000, mockCallbacks);
+    update(16, 1000);
 
     // O item também deve ter seu vetor apontado para a nave
-    // (player no x:100, item no x:10, então x deve aumentar positivamente proximo a 12)
     const d = state.drops[0];
     expect(d.x).toBeGreaterThan(10);
     expect(d.y).toBeGreaterThan(10);
+
+    EventBus.off('GAME_UPDATE_HUD', handler);
+  });
+
+  it('should emit GAME_WAVE_CLEAR when all drops are collected', () => {
+    let clearEmitted = false;
+    const handler = () => { clearEmitted = true; };
+    EventBus.on('GAME_WAVE_CLEAR', handler);
+
+    resetState({
+      cfg: getWaveConfig(1),
+      wave: 1,
+      player: { x: 100, y: 500, w: 34, h: 36 },
+      enemies: [],
+      boss: { active: false },
+      drops: [],
+      bullets: [],
+      eBullets: [],
+      shields: [],
+      particles: [],
+      postWaveMagnet: true,
+      over: false,
+      paused: false
+    });
+
+    update(16, 1000);
+
+    expect(clearEmitted).toBe(true);
+    expect(state.postWaveMagnet).toBe(false);
+
+    EventBus.off('GAME_WAVE_CLEAR', handler);
   });
 });
-

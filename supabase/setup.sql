@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   username TEXT,
   role TEXT DEFAULT 'player' CHECK (role IN ('player', 'admin')),
   max_wave INTEGER DEFAULT 0,
-  high_score INTEGER DEFAULT 0,
+  max_score INTEGER DEFAULT 0,
   last_score INTEGER DEFAULT 0,
   last_wave INTEGER DEFAULT 0,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

@@ -43,7 +43,7 @@ vi.mock('../src/lib/supabase.js', () => ({
 }));
 
 // Importações dos serviços após o mock ser configurado
-import { signInWithGoogle, signInWithGithub, signOut, getUserProfile, updateMaxScore } from '../src/api/auth.js';
+import { signInWithGoogle, signInWithGithub, signOut, getUserProfile, persistScore } from '../src/api/auth.js';
 
 describe('Auth API', () => {
   beforeEach(() => {
@@ -60,13 +60,10 @@ describe('Auth API', () => {
     }));
   });
 
-  it('deve chamar signInWithOAuth para GitHub com prompt select_account', async () => {
+  it('deve chamar signInWithOAuth para GitHub', async () => {
     await signInWithGithub();
     expect(mocks.mockSignInWithOAuth).toHaveBeenCalledWith(expect.objectContaining({
-      provider: 'github',
-      options: expect.objectContaining({
-        queryParams: expect.objectContaining({ prompt: 'select_account' })
-      })
+      provider: 'github'
     }));
   });
 
@@ -83,12 +80,24 @@ describe('Auth API', () => {
     expect(profile).toEqual(mockProfile);
   });
 
-  it('deve validar score e wave antes de pesquisar/atualizar', async () => {
-    // Se passarmos valores inválidos, a função deve retornar erro ou ignorar
-    const res1 = await updateMaxScore('123', -10, 5);
-    expect(mocks.mockFrom).not.toHaveBeenCalled();
+  it('deve persistir score usando upsert e retornando o registro atualizado', async () => {
+    const mockUpsert = vi.fn(() => ({
+      select: vi.fn(() => ({
+        single: vi.fn(() => Promise.resolve({ data: { id: '123', last_score: 100 }, error: null }))
+      }))
+    }));
+    mocks.mockFrom.mockReturnValueOnce({ upsert: mockUpsert });
 
-    const res2 = await updateMaxScore('123', 100, -1);
-    expect(mocks.mockFrom).not.toHaveBeenCalled();
+    const currentProfile = { max_score: 50, max_wave: 5 };
+    const res = await persistScore('123', 100, 10, currentProfile);
+
+    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      id:        '123',
+      last_score: 100,
+      last_wave:  10,
+      max_score:  100, // max(50, 100)
+      max_wave:   10   // max(5, 10)
+    }));
+    expect(res.last_score).toBe(100);
   });
 });

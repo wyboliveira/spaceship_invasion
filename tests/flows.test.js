@@ -49,28 +49,37 @@ describe('Integration Flows (E2E Simulado)', () => {
      }));
   });
 
-  it('Fluxo 2: Zerar Histórico destrava a UI no caso de falha de conexão (Timeout)', async () => {
-    vi.useFakeTimers();
-    // Simula mock infinito
+  it('Fluxo 2: Zerar Histórico define flag de resiliência no localStorage', async () => {
+    // Simula sucesso
     vi.mocked(supabase.from).mockReturnValue({
-      update: () => ({
-        eq: () => new Promise(() => {}) // Promise que nunca resolve
-      })
+      update: vi.fn(() => ({
+        eq: vi.fn(() => Promise.resolve({ error: null }))
+      }))
     });
 
-    const resetPromise = clearUserHistory('user_123');
-    expect(state.userProfile.max_score).toBe(0); // Optimistic
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+
+    await clearUserHistory('user_123');
     
-    // Avançamos o timer para acionar a rejeição do Promise.race do arquivo original
-    vi.runAllTimers();
-    await resetPromise;
-    expect(state.userProfile.max_score).toBe(0); // Deve manter o estado zerado
+    // Verificamos se a flag de segurança foi definida antes e removida depois
+    expect(setItemSpy).toHaveBeenCalledWith('spaceship_invasion_pending_reset', 'user_123');
+    expect(removeItemSpy).toHaveBeenCalledWith('spaceship_invasion_pending_reset');
   });
 
-  it('Fluxo 3: Callbacks de Logout garantem reset de sessão instantâneo', async () => {
-    // Como o mock retorna Promise resolvido instantaneamente, não precisamos de fake timers
-    await signOut();
-    expect(state.session).toBeNull();
-    expect(state.userProfile).toBeNull();
+  it('Fluxo 3: Se o reset falhar, a flag deve permanecer no localStorage', async () => {
+    // Simula erro de rede
+    vi.mocked(supabase.from).mockReturnValue({
+      update: vi.fn(() => ({
+        eq: vi.fn(() => Promise.reject(new Error('Network Error')))
+      }))
+    });
+
+    const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem');
+
+    await expect(clearUserHistory('user_123')).rejects.toThrow('Network Error');
+    
+    // A flag não deve ter sido removida se o I/O falhou
+    expect(removeItemSpy).not.toHaveBeenCalledWith('spaceship_invasion_pending_reset');
   });
 });
