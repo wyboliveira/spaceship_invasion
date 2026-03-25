@@ -38,27 +38,22 @@ describe('SyncQueue', () => {
         expect(spyError).toHaveBeenCalledWith(expect.objectContaining({ type: 'RetryTask' }));
     });
 
-    it('should clear the queue on session change', async () => {
+    it('should process all queued tasks regardless of session (session-filter is disabled)', async () => {
         const task1 = vi.fn().mockResolvedValue('ok');
         const task2 = vi.fn().mockResolvedValue('ok');
-        
-        let resolveBlocker;
-        const blockerTask = vi.fn().mockReturnValue(new Promise(r => resolveBlocker = r));
-        
+
         const session1 = SyncQueue.currentSessionId;
-        SyncQueue.enqueue('Blocker', blockerTask, session1);
         SyncQueue.enqueue('Task1', task1, session1);
-        
+
         SyncQueue.newSession();
         const session2 = SyncQueue.currentSessionId;
         SyncQueue.enqueue('Task2', task2, session2);
 
-        // O Blocker está rodando. O Task1 está na fila (session1). O Task2 está na fila (session2).
-        resolveBlocker();
         await vi.runAllTimersAsync();
 
-        // Task1 deve ser descartado porque sua sessão (1) é inferior à atual (2)
-        expect(task1).not.toHaveBeenCalled();
+        // Ambas as tarefas devem ser processadas — o filtro por sessão está desativado
+        // (scores são persistentes e não devem ser descartados por mudança de sessão)
+        expect(task1).toHaveBeenCalled();
         expect(task2).toHaveBeenCalled();
     });
 

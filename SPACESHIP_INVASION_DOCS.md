@@ -1,85 +1,157 @@
-# 🚀 Spaceship Invasion — Dev Edition
+# Spaceship Invasion — Dev Edition
 ### Documentação Técnica — Arquitetura Cloud & Persistência
 
 ---
 
-## 🚀 Novidades da Versão Atual (Atualização Supabase)
+## Stack Tecnológica
 
-O projeto evoluiu de um jogo puramente local para uma plataforma com persistência em nuvem, autenticação social e arquitetura modular robusta.
-
-### 1. Stack Tecnológica Atualizada
-- **Bundler:** [Vite](https://vitejs.dev/) (Substituiu o HTML legível por módulos ES6).
-- **Backend-as-a-Service:** [Supabase](https://supabase.com/) (Auth + Database PostgreSQL).
-- **Frontend:** Vanilla JavaScript (Canvas API) + CSS Dinâmico.
-- **Testes:** [Vitest](https://vitest.dev/) (Unitários e Integração).
-
----
-
-## 🛠 Arquitetura de Persistência e Auth
-
-### Fluxo de Autenticação
-Implementamos um sistema de login social via **Google** e **GitHub**.
-- **Forced Selection:** Configuramos `prompt: 'select_account'` para permitir que o usuário troque de conta facilmente em cada tentativa de login.
-- **Estado Reativo:** O estado global `state.session` e `state.userProfile` são sincronizados automaticamente através do listener `onAuthStateChange`.
-
-### Estratégia de Salvamento (Persistence)
-Utilizamos o padrão **Optimistic UI with Background Sync**:
-1. **Atualização Imediata:** Quando o jogo acaba ou o histórico é zerado, o `state.userProfile` é atualizado localmente instantaneamente.
-2. **Sync em Background:** Uma chamada assíncrona para a tabela `profiles` do Supabase ocorre em paralelo.
-3. **Reconciliação:** Ao receber a resposta do banco, o estado local é validado para garantir integridade.
-
-### Resiliência da Interface (UI Resilience)
-Para evitar travamentos (Freezes), as operações críticas (`signOut` e `clearUserHistory`) possuem:
-- **Timeouts:** Limite programado de 5 segundos.
-- **Finally Block:** Garantia de que a interface (Loading/Bloqueio) seja liberada mesmo em caso de erro de rede.
+| Camada | Tecnologia |
+|---|---|
+| Bundler | [Vite](https://vitejs.dev/) — módulos ES6, dev server na porta 3000 |
+| Backend-as-a-Service | [Supabase](https://supabase.com/) — Auth OAuth + PostgreSQL |
+| Frontend | Vanilla JavaScript (Canvas API) + CSS com variáveis |
+| Testes | [Vitest](https://vitest.dev/) — unitários e integração, ambiente jsdom |
 
 ---
 
-## 📊 Estrutura do Banco de Dados (Supabase)
+## Autenticação
+
+Login social via **Google** e **GitHub** usando OAuth redirect.
+
+- `prompt: 'select_account'` garante que o Google sempre exibe a tela de seleção de conta
+- `scope: 'global'` no logout invalida a sessão no servidor (não apenas no navegador local)
+- `TOKEN_REFRESHED` é tratado silenciosamente — não interrompe o jogo
+- A URL é limpa após o redirect OAuth (`history.replaceState`) para evitar que o token
+  fique visível na barra de endereços ou cause re-autenticação no reload
+
+---
+
+## Persistência de Dados — Estratégia Local-First
+
+O jogo utiliza a estratégia **local-first**: o progresso é salvo no `localStorage` do
+navegador de forma imediata, sem depender de rede. O Supabase é atualizado somente
+quando o usuário clica no botão **SYNC RECORDS**.
+
+### Por que local-first?
+
+O Supabase no plano gratuito entra em modo de espera após ~10 minutos sem uso. A primeira
+requisição após esse período pode demorar 8–12 segundos (cold start). Com a abordagem
+anterior (sync automático após cada wave), o jogador via um spinner a cada fim de partida.
+
+Com local-first, o jogo responde instantaneamente e a sincronização com o banco acontece
+no momento escolhido pelo usuário.
+
+### Fluxo de dados
+
+```
+Partida encerrada (wave end / game over)
+  └─ localStorage atualizado imediatamente
+       max_score, max_wave, last_score, last_wave
+       pendingSync = true
+
+Botão SYNC RECORDS (menu, usuário logado)
+  └─ Spinner de loading exibido
+  └─ Dados do localStorage enviados ao Supabase via upsert
+  └─ lastSyncedAt atualizado, pendingSync = false
+  └─ "LAST SYNC: dd/mm/yyyy hh:mm" exibido no menu
+
+Primeiro login ou novo dispositivo
+  └─ Sem dados locais → busca do Supabase uma única vez
+  └─ localStorage inicializado com dados do banco (seedFromDatabase)
+```
+
+### Indicadores visuais no menu
+
+| Estado | Cor do botão SYNC | Mensagem |
+|---|---|---|
+| Dados pendentes | Amarelo `#FFD700` | "LAST SYNC: [data]" em amarelo |
+| Tudo sincronizado | Verde `#00ff88` | "LAST SYNC: [data]" em cinza |
+| Nunca sincronizado | Verde `#00ff88` | "NUNCA SINCRONIZADO" em vermelho |
+
+---
+
+## Banco de Dados (Supabase)
 
 Tabela: `profiles`
+
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `id` | uuid (PK) | Relacionado a `auth.users` |
-| `max_score` | bigint | Maior pontuação histórica (Antigo `high_score`) |
-| `max_wave` | int | Maior onda alcançada |
+| `id` | uuid PK | Foreign key para `auth.users` |
+| `username` | text | Nome exibido no jogo (editável pelo jogador) |
+| `max_score` | bigint | Maior pontuação histórica |
+| `max_wave` | int | Maior wave alcançada |
 | `last_score` | bigint | Pontuação da última partida |
-| `last_wave` | int | Onda da última partida |
-| `updated_at`| timestamptz | Última sincronização |
+| `last_wave` | int | Wave da última partida |
+| `updated_at` | timestamptz | Última sincronização com o banco |
 
 ---
 
-## 🧪 Estratégia de Testes
+## Editor de Username
 
-Dividimos a qualidade do código em três camadas:
+O jogador pode editar o nome exibido no HUD passando o mouse sobre ele.
+Um ícone de lápis `✎` amarelo aparece no hover. Ao clicar:
 
-1. **Unitários (`tests/helpers.test.js`, `tests/boss.test.js`)**: Validação de fórmulas de colisão, padrões de tiro e configurações de ondas.
-2. **Lógica de Persistência (`tests/history.test.js`)**: Garante que o estado local seja resetado corretamente e que o Supabase receba os valores de zeramento.
-3. **E2E Simulado/Integração (`tests/integration/flows.test.js`)**: Simula fluxos completos (Login -> Jogar -> Save -> Logout) e verifica se a interface não trava sob falhas simuladas.
+1. Um campo de texto inline substitui o nome (mesma fonte Orbitron do HUD)
+2. **Enter** salva o nome — atualizado no localStorage imediatamente e no Supabase em background
+3. **Escape** ou clicar fora cancela a edição
+4. Após salvar, o foco vai para o botão START para o jogador iniciar o jogo com Enter
 
----
-
-## 💡 Nossas "Falhas" e Aprendizados (Dev Log)
-
-- **O Bug do Logout Infinito:** Inicialmente, se a rede falhasse durante o `signOut`, a UI ficava presa em "Saindo...". A solução foi desacoplar o estado local da resposta do servidor.
-- **Renomeação de Coluna:** Corrigimos o erro conceitual onde chamávamos o recorde de `high_score` no código e `max_score` no banco, padronizando tudo como `max_score`.
-- **Hoisting de Mocks:** Aprendemos que o Vitest processa `vi.mock` antes de tudo, o que nos forçou a refatorar o `flows.test.js` para usar closures corretas nos mocks do Supabase.
+O username é preservado ao zerar o histórico e ao salvar novos scores.
 
 ---
 
-## 🗺 Roadmap Atualizado
+## Testes
 
-### Sprint 3 — Cloud & Identidade (CONCLUÍDA)
-- [x] Integração Supabase Auth (Google/GitHub).
-- [x] Persistência de Score/Wave na nuvem.
-- [x] Funcionalidade de "Zerar Histórico".
-- [x] Padronização de documentação JSDoc/PT-BR.
+A suite usa Vitest com ambiente jsdom. Os testes ficam em `tests/` e são separados por módulo.
 
-### Sprint 4 — Polimento de Produção (EM ANDAMENTO)
-- [ ] Implementar Ranking Global (Leaderboard).
-- [ ] Adicionar Trilha Sonora Original.
-- [ ] Implementar Responsive Resizer para Mobile.
+```
+tests/
+├── auth.test.js       ← OAuth, getUserProfile, persistScore, updateUsername
+├── history.test.js    ← lib/localStore.js: save, load, seed, clear, markSynced, updateUsername
+├── flows.test.js      ← Fluxos de integração: partida local, SYNC RECORDS, zerar histórico
+├── sync.test.js       ← SyncQueue: enqueue, retry com backoff, SYNC_DONE/SYNC_FAILED
+├── core.test.js       ← EventBus e GameFSM: transições válidas e inválidas
+├── gameplay.test.js   ← Sistema de armas, configuração de waves, sistema de drops
+├── boss.test.js       ← Inicialização e posicionamento de bosses
+├── helpers.test.js    ← Criação de inimigos e escudos
+└── connection.test.js ← Diagnóstico de latência Supabase (requer rede, não é CI)
+```
+
+Para rodar: `npm test`
 
 ---
 
-*Documentação atualizada em 18/03/2026 para Spaceship Invasion v1.2.0-cloud*
+## Aprendizados de Desenvolvimento
+
+**Cold start do Supabase free tier**
+O plano gratuito pausa instâncias após inatividade. A solução foi abandonar o sync automático
+e adotar local-first com sync manual — o usuário só espera quando escolhe sincronizar.
+
+**Separação de responsabilidades no auth**
+O `auth.js` não deve conhecer o estado do jogo. Toda lógica de "o que fazer com os dados
+após receber do banco" fica no `main.js` ou no `localStore.js`.
+
+**Atalhos de teclado conflitando com inputs**
+O handler global de `keydown` em `input.js` precisa verificar `e.target.tagName` antes de
+disparar atalhos do jogo — caso contrário, digitar "R" em um campo de texto abre o diálogo
+de reiniciar, e "Enter" inicia o jogo antes de salvar o texto.
+
+**Mocks de Supabase no Vitest**
+O Vitest processa `vi.mock()` antes de qualquer `import`. É necessário usar `vi.hoisted()`
+para criar mocks que serão referenciados dentro do bloco `vi.mock()`.
+
+---
+
+## Roadmap
+
+### Concluído
+- [x] Integração Supabase Auth (Google/GitHub)
+- [x] Persistência local-first com SYNC RECORDS manual
+- [x] Editor de username inline no HUD
+- [x] FSM de 6 estados para navegação do jogo
+- [x] Suite de testes com 58 casos cobrindo todos os módulos principais
+
+### Planejado
+- [ ] Leaderboard global (já há campo `username` na tabela `profiles`)
+- [ ] Trilha sonora original
+- [ ] Responsive/mobile resizer

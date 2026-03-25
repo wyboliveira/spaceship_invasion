@@ -56,12 +56,27 @@ describe('GameFSM', () => {
         warnSpy.mockRestore();
     });
 
-    it('should emit FSM_ event on transition', () => {
+    it('should emit FSM_GAME_OVER event on PLAYING -> GAME_OVER transition', () => {
         const spy = vi.fn();
         EventBus.on('FSM_GAME_OVER', spy);
         GameFSM.forceState('PLAYING');
-        GameFSM.transition('SYNCING', { next: 'GAME_OVER' });
         GameFSM.transition('GAME_OVER');
         expect(spy).toHaveBeenCalled();
+    });
+
+    it('should allow PLAYING -> WAVE_END (direct, sem SYNCING)', () => {
+        GameFSM.forceState('PLAYING');
+        const result = GameFSM.transition('WAVE_END');
+        expect(result).toBe(true);
+        expect(GameFSM.state).toBe('WAVE_END');
+    });
+
+    it('should reject PLAYING -> SYNCING (removido do fluxo do jogo)', () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        GameFSM.forceState('PLAYING');
+        const result = GameFSM.transition('SYNCING');
+        expect(result).toBe(false);
+        expect(GameFSM.state).toBe('PLAYING');
+        warnSpy.mockRestore();
     });
 });

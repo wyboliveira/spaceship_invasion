@@ -10,6 +10,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    include: ['tests/**/*.test.js'],
+    exclude: ['.claude/**', 'node_modules/**'],
     pool: 'threads',
     poolOptions: {
       threads: {
@@ -17,7 +19,7 @@ export default defineConfig({
       },
     },
     // Desativar threads ajuda na estabilidade do process.env e window no Windows
-    threads: false, 
+    threads: false,
   }
 });
 

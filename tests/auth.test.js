@@ -43,7 +43,7 @@ vi.mock('../src/lib/supabase.js', () => ({
 }));
 
 // Importações dos serviços após o mock ser configurado
-import { signInWithGoogle, signInWithGithub, signOut, getUserProfile, persistScore } from '../src/api/auth.js';
+import { signInWithGoogle, signInWithGithub, signOut, getUserProfile, persistScore, updateUsername } from '../src/api/auth.js';
 
 describe('Auth API', () => {
   beforeEach(() => {
@@ -80,24 +80,39 @@ describe('Auth API', () => {
     expect(profile).toEqual(mockProfile);
   });
 
-  it('deve persistir score usando upsert e retornando o registro atualizado', async () => {
-    const mockUpsert = vi.fn(() => ({
-      select: vi.fn(() => ({
-        single: vi.fn(() => Promise.resolve({ data: { id: '123', last_score: 100 }, error: null }))
-      }))
-    }));
+  it('deve persistir score via upsert com os campos calculados corretamente', async () => {
+    const mockUpsert = vi.fn().mockResolvedValue({ error: null });
     mocks.mockFrom.mockReturnValueOnce({ upsert: mockUpsert });
 
     const currentProfile = { max_score: 50, max_wave: 5 };
     const res = await persistScore('123', 100, 10, currentProfile);
 
-    expect(mockUpsert).toHaveBeenCalledWith(expect.objectContaining({
-      id:        '123',
-      last_score: 100,
-      last_wave:  10,
-      max_score:  100, // max(50, 100)
-      max_wave:   10   // max(5, 10)
-    }));
+    // upsert chamado com (payload, options) — dois argumentos
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id:         '123',
+        last_score: 100,
+        last_wave:  10,
+        max_score:  100, // max(50, 100)
+        max_wave:   10,  // max(5, 10)
+      }),
+      { onConflict: 'id' },
+    );
+    // persistScore retorna o payload local (não espera resposta do banco)
     expect(res.last_score).toBe(100);
+    expect(res.max_score).toBe(100);
+  });
+
+  it('deve atualizar o username no banco via update', async () => {
+    const mockEq     = vi.fn().mockResolvedValue({ error: null });
+    const mockUpdate = vi.fn(() => ({ eq: mockEq }));
+    mocks.mockFrom.mockReturnValueOnce({ update: mockUpdate });
+
+    await updateUsername('123', 'NovaEstrela');
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ username: 'NovaEstrela' }),
+    );
+    expect(mockEq).toHaveBeenCalledWith('id', '123');
   });
 });

@@ -24,7 +24,7 @@ export function updateHUD() {
             const username = state.session
               ? (state.userProfile?.username || state.session.user.email.split('@')[0])
               : 'GUEST';
-            userEl.textContent = username.toUpperCase();
+            userEl.textContent = username;
         }
 
         // Botão de edição só aparece quando há sessão ativa
@@ -85,6 +85,8 @@ export function initUsernameEdit(onSave) {
                 await onSave(newName);
             }
             cleanup();
+            // Devolve o foco ao botão de start para que Enter inicie o jogo em seguida
+            document.getElementById('startBtn')?.focus();
         };
 
         const cancel = () => {
