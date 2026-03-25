@@ -16,7 +16,10 @@
   <div class="hud">
     <div class="hud-block left" style="min-width: 150px;">
       <div class="hud-label">player</div>
-      <div class="hud-value" id="userDisplay" style="color:var(--accent2)">guest</div>
+      <div class="hud-user-wrapper" id="userDisplayWrapper">
+        <span class="hud-value" id="userDisplay" style="color:var(--accent2)">guest</span>
+        <button id="editUsernameBtn" class="edit-username-btn" title="Editar nome">✎</button>
+      </div>
     </div>
     <div class="hud-block">
       <div class="hud-label">score</div>
@@ -60,10 +63,12 @@
                <span>SCORE: <span id="lastScoreVal">0</span></span>
                <span>WAVE: <span id="lastWaveVal">0</span></span>
              </div>
-             <div style="display:flex; gap:10px; justify-content:center;">
+             <div style="display:flex; gap:10px; justify-content:center; margin-bottom:10px;">
                <button class="press-start" id="logoutBtn" style="font-size:10px; padding:5px 15px; background:#ff4444; border:none; height:auto; line-height:1; opacity:0.8;">SAIR</button>
                <button class="press-start" id="clearHistoryBtn" style="font-size:10px; padding:5px 15px; background:#444; border:1px solid #666; color:#aaa; height:auto; line-height:1; opacity:0.8;">ZERAR HISTÓRICO</button>
              </div>
+             <button class="press-start" id="syncRecordsBtn" style="font-size:10px; padding:6px 18px; background:#0a2a1a; border:1px solid #00ff88; color:#00ff88; height:auto; line-height:1; width:100%; max-width:220px;">SYNC RECORDS</button>
+             <div id="syncStatusText" style="font-size:9px; color:#555; margin-top:5px; letter-spacing:1px; min-height:14px;">—</div>
            </div>
         </div>
       </div>
@@ -117,11 +122,6 @@
       </div>
     </div>
 
-    <div id="modal-sync" class="ui-modal hidden">
-      <div class="overlay-title" style="color:var(--accent); font-size:20px;">AGUARDE</div>
-      <div class="overlay-sub" style="color:#aaa; margin-top:16px; margin-bottom:16px;">SINCRONIZANDO PROGRESSO...</div>
-      <button class="press-start" id="skipSyncBtn" style="background:#222; color:#666; border-color:#444; font-size:10px; padding:5px 15px;">PULAR (OFFLINE)</button>
-    </div>
   </div>
 
   <div class="footer-hints">

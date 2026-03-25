@@ -3,16 +3,15 @@
  * Funções de acesso ao Supabase. Nenhuma lógica de navegação ou estado de jogo
  * vive aqui — apenas chamadas à API e retorno de dados.
  *
- * Quem chama estas funções: SyncQueue (via taskFn) e o listener de auth em main.js.
+ * Quem chama estas funções: o listener de auth em main.js e o botão SYNC RECORDS.
  */
 
 import { supabase } from '../lib/supabase.js';
 
-const PENDING_RESET_KEY = 'spaceship_invasion_pending_reset';
-
 // ── Login ─────────────────────────────────────────────────────
 
 export async function signInWithGoogle() {
+  if (!supabase) throw new Error('Auth indisponível: credenciais Supabase não configuradas.');
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -24,6 +23,7 @@ export async function signInWithGoogle() {
 }
 
 export async function signInWithGithub() {
+  if (!supabase) throw new Error('Auth indisponível: credenciais Supabase não configuradas.');
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: { redirectTo: window.location.origin },
@@ -32,10 +32,18 @@ export async function signInWithGithub() {
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  // Erros de signOut são ignorados intencionalmente — o estado local
-  // já é limpo pelo listener onAuthStateChange.
-  if (error) console.warn('[Auth] signOut retornou erro (ignorado):', error.message);
+  if (!supabase) return;
+  // scope: 'global' invalida a sessão no servidor também,
+  // garantindo que o token não permaneça ativo em nenhum dispositivo.
+  const { error } = await supabase.auth.signOut({ scope: 'global' });
+  if (error) {
+    // signOut pode falhar se a sessão já expirou no servidor.
+    // Remove as chaves do Supabase do localStorage manualmente como fallback.
+    console.warn('[Auth] signOut retornou erro, forçando limpeza local:', error.message);
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-'))
+      .forEach(k => localStorage.removeItem(k));
+  }
 }
 
 // ── Perfil ────────────────────────────────────────────────────
@@ -45,6 +53,7 @@ export async function signOut() {
  * Retorna null se o perfil ainda não existe (primeiro login).
  */
 export async function getUserProfile(userId) {
+  if (!supabase) return null;
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
@@ -53,6 +62,20 @@ export async function getUserProfile(userId) {
 
   if (error) throw error;
   return data;
+}
+
+// ── Username ──────────────────────────────────────────────────
+
+/**
+ * Atualiza o username do usuário no banco.
+ */
+export async function updateUsername(userId, username) {
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('profiles')
+    .update({ username, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+  if (error) throw error;
 }
 
 // ── Score ─────────────────────────────────────────────────────
@@ -69,74 +92,30 @@ export async function getUserProfile(userId) {
  * @returns {Object} perfil salvo
  */
 export async function persistScore(userId, score, wave, currentProfile = {}) {
+  if (!supabase) return null;
   const safeProfile = currentProfile || {};
   const newMaxScore = Math.max(safeProfile.max_score || 0, score);
   const newMaxWave  = Math.max(safeProfile.max_wave  || 0, wave);
 
-  const { data, error } = await supabase
+  const payload = {
+    id:         userId,
+    last_score: score,
+    last_wave:  wave,
+    max_score:  newMaxScore,
+    max_wave:   newMaxWave,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
     .from('profiles')
-    .upsert({
-      id:         userId,
-      last_score: score,
-      last_wave:  wave,
-      max_score:  newMaxScore,
-      max_wave:   newMaxWave,
-      updated_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+    .upsert(payload, { onConflict: 'id' });
 
   if (error) {
     console.error('[Auth] Erro em persistScore:', error.message);
     throw error;
   }
-  
-  console.log('[Auth] Score persistido com sucesso:', data?.max_score);
-  return data;
+
+  console.log('[Auth] Score persistido com sucesso:', newMaxScore);
+  return payload;
 }
 
-// ── Histórico ─────────────────────────────────────────────────
-
-/**
- * Zera o histórico do usuário no banco.
- * Usa localStorage como flag de resiliência: se falhar, será reprocessado no boot.
- */
-export async function clearUserHistory(userId) {
-  localStorage.setItem(PENDING_RESET_KEY, userId);
-
-  const performUpdate = () => supabase
-    .from('profiles')
-    .update({
-      max_score: 0, max_wave: 0,
-      last_score: 0, last_wave: 0,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId);
-
-  const { error } = await performUpdate();
-
-  if (error) {
-    console.error('[Auth] Erro ao zerar histórico:', error.message);
-    throw error;
-  }
-
-  localStorage.removeItem(PENDING_RESET_KEY);
-}
-
-/**
- * Reprocessa resets pendentes que não foram concluídos na sessão anterior.
- * Chamado no boot, após login confirmado.
- */
-export async function processPendingResets() {
-  const pendingId = localStorage.getItem(PENDING_RESET_KEY);
-  if (!pendingId) return;
-
-  console.log(`[Auth] Reset pendente detectado para ${pendingId}, reprocessando...`);
-
-  try {
-    await clearUserHistory(pendingId);
-    console.log('[Auth] ✅ Reset pendente concluído.');
-  } catch (err) {
-    console.warn('[Auth] ⏳ Falha no reset pendente, será tentado novamente no próximo boot:', err.message);
-  }
-}

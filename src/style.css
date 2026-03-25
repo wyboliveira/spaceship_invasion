@@ -61,6 +61,48 @@ body::before {
 #waveDisplay  { color: var(--green); font-size: 0.9rem; }
 #livesDisplay { color: var(--accent2); letter-spacing: 4px; }
 
+.hud-user-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-username-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent3);
+  font-size: 1rem;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.65;
+  transition: opacity 0.15s;
+}
+
+.hud-user-wrapper:hover .edit-username-btn {
+  display: inline-block;
+}
+
+.edit-username-btn:hover { opacity: 1; }
+
+/* Esconde o botão quando o usuário não está logado */
+.hud-user-wrapper.no-session .edit-username-btn { display: none !important; }
+
+.hud-username-input {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--accent2);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent3);
+  outline: none;
+  width: 140px;
+  padding: 0;
+  caret-color: var(--accent3);
+}
+
 .canvas-wrapper {
   position: relative;
   width: 858px; height: 676px;

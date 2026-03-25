@@ -2,15 +2,15 @@
  * main.js — Orquestrador central
  *
  * Responsabilidades únicas deste arquivo:
- *   1. Inicializar e conectar as 4 camadas (FSM, EventBus, SyncQueue, I/O)
+ *   1. Inicializar e conectar as camadas (FSM, EventBus, localStore, I/O)
  *   2. Executar o game loop (requestAnimationFrame)
  *   3. Montar e desmontar overlays de UI em resposta a eventos da FSM
- *   4. Escutar onAuthStateChange e emitir AUTH_EVENT no bus (sem chamar reset() diretamente)
+ *   4. Escutar onAuthStateChange e atualizar estado de auth
  *
  * O que NÃO vive mais aqui:
- *   - Lógica de retry / timeout de I/O  →  SyncQueue.js
- *   - Decisão de qual tela mostrar      →  GameFSM.js
- *   - Chamadas diretas ao Supabase      →  auth.js (via SyncQueue)
+ *   - Decisão de qual tela mostrar   →  GameFSM.js
+ *   - Cache de progresso do jogador  →  lib/localStore.js
+ *   - Chamadas diretas ao Supabase   →  api/auth.js (somente no SYNC RECORDS)
  */
 
 import { state, updateState }            from './game/state.js';
@@ -24,7 +24,7 @@ import {
   drawShieldBlock, drawDrop,
   drawWeaponIndicator, drawBoss,
 } from './game/sprites.js';
-import { updateHUD }                     from './ui/hud.js';
+import { updateHUD, initUsernameEdit }   from './ui/hud.js';
 import { 
   showOverlay, hideOverlay, 
   showScreen, hideAllScreens, 
@@ -33,12 +33,15 @@ import {
 import { supabase }                      from './lib/supabase.js';
 import {
   signInWithGoogle, signInWithGithub, signOut,
-  getUserProfile, persistScore,
-  clearUserHistory, processPendingResets,
+  getUserProfile, persistScore, updateUsername,
 } from './api/auth.js';
+import {
+  saveLocalProgress, loadLocalProgress,
+  seedFromDatabase, markSynced, clearLocalProgress,
+  updateLocalUsername,
+} from './lib/localStore.js';
 import { EventBus }  from './core/EventBus.js';
 import { GameFSM }   from './core/GameFSM.js';
-import { SyncQueue } from './core/SyncQueue.js';
 
 // ─────────────────────────────────────────────────────────────
 // Canvas
@@ -196,32 +199,18 @@ function stopLoop() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Sync helpers — constroem taskFns para a SyncQueue
+// Sync helper — salva progresso no localStorage (sem rede)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Enfileira uma sincronização de score na SyncQueue.
- * Captura score e wave NO MOMENTO do enfileiramento para evitar
- * que o estado mude antes da tarefa executar.
+ * Salva score e wave no localStorage imediatamente, sem chamada de rede.
+ * O dado ficará marcado como pendingSync = true até o usuário clicar SYNC RECORDS.
  */
-function enqueueSyncScore(context) {
+function _saveLocalScore(context) {
   if (!state.session || state.wave <= 0) return;
-
-  const userId    = state.session.user.id;
-  const score     = state.score;
-  const wave      = state.wave;
-  const profile   = state.userProfile;
-  const sessionId = SyncQueue.currentSessionId;
-
-  SyncQueue.enqueue(
-    context,
-    async () => {
-      const saved = await persistScore(userId, score, wave, profile);
-      // Atualiza perfil local com dados confirmados pelo banco
-      updateState({ userProfile: saved, syncError: null });
-    },
-    sessionId,
-  );
+  const updated = saveLocalProgress(state.session.user.id, state.score, state.wave);
+  updateState({ userProfile: updated, syncError: null });
+  console.log(`[LocalStore] Score salvo localmente (${context}): score=${state.score} wave=${state.wave}`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -242,25 +231,25 @@ const GameUI = {
   /**
    * Chamado por update.js quando o jogador perde todas as vidas
    * ou os inimigos alcançam a linha do jogador.
-   * Transição: PLAYING → SYNCING → GAME_OVER
+   * Transição: PLAYING → GAME_OVER (score salvo localmente, sem espera de rede)
    */
   triggerGameOver() {
     updateState({ over: true });
     stopLoop();
-    enqueueSyncScore('GameOver');
-    GameFSM.transition('SYNCING', { next: 'GAME_OVER' });
+    _saveLocalScore('GameOver');
+    GameFSM.transition('GAME_OVER');
   },
 
   /**
    * Chamado por update.js quando todos os inimigos foram eliminados
    * e não há boss nesta wave.
-   * Transição: PLAYING → SYNCING → WAVE_END
+   * Transição: PLAYING → WAVE_END (score salvo localmente, sem espera de rede)
    */
   showWaveClear() {
     updateState({ over: true });
     stopLoop();
-    enqueueSyncScore('WaveClear');
-    GameFSM.transition('SYNCING', { next: 'WAVE_END' });
+    _saveLocalScore('WaveClear');
+    GameFSM.transition('WAVE_END');
   },
 
   /**
@@ -370,48 +359,6 @@ const GameUI = {
 // Handlers da FSM — reagem a transições de estado
 // ─────────────────────────────────────────────────────────────
 
-/**
- * SYNCING: mostra spinner enquanto a SyncQueue processa.
- * Ao receber SYNC_DONE, avança para o próximo estado (WAVE_END ou GAME_OVER).
- * O botão "PULAR" resolve a espera imediatamente sem cancelar a fila
- * (a fila continua em background — os dados ainda serão salvos).
- */
-EventBus.on('FSM_SYNCING', ({ payload }) => {
-  const next = payload?.next || 'MENU'; // 'WAVE_END' ou 'GAME_OVER'
-
-  showScreen('modal-sync');
-
-  // Handler único para SYNC_DONE neste contexto
-  const onDone = () => {
-    EventBus.off('SYNC_DONE', onDone);
-    hideModal('modal-sync');
-    GameFSM.transition(next);
-  };
-  EventBus.on('SYNC_DONE', onDone);
-
-  // Timeout de segurança: avança mesmo se a fila travar
-  const timeoutId = setTimeout(() => {
-    EventBus.off('SYNC_DONE', onDone);
-    hideModal('modal-sync');
-    console.warn('[Sync] Timeout de segurança atingido, avançando sem confirmação.');
-    GameFSM.transition(next);
-  }, 6000);
-
-  // Limpa o timeout quando SYNC_DONE chegar antes
-  EventBus.on('SYNC_DONE', () => clearTimeout(timeoutId));
-
-  // Botão pular: avança imediatamente (fila continua em background)
-  const skipBtn = document.getElementById('skipSyncBtn');
-  if (skipBtn) {
-    skipBtn.onclick = () => {
-      EventBus.off('SYNC_DONE', onDone);
-      clearTimeout(timeoutId);
-      hideModal('modal-sync');
-      GameFSM.transition(next);
-    };
-  }
-});
-
 /** WAVE_END: mostra resultado da wave e botão para a próxima. */
 EventBus.on('FSM_WAVE_END', () => {
   const next = state.wave + 1;
@@ -491,10 +438,41 @@ function _renderMenu() {
     guestEl.classList.add('hidden');
     loggedEl.classList.remove('hidden');
     document.getElementById('userNickname').textContent = `USER: ${username.toUpperCase()}`;
-    document.getElementById('maxScoreVal').textContent = state.userProfile?.max_score || 0;
-    document.getElementById('maxWaveVal').textContent = state.userProfile?.max_wave || 0;
-    document.getElementById('lastScoreVal').textContent = state.userProfile?.last_score || 0;
-    document.getElementById('lastWaveVal').textContent = state.userProfile?.last_wave || 0;
+
+    const local = loadLocalProgress(state.session.user.id) || state.userProfile || {};
+    document.getElementById('maxScoreVal').textContent  = local.max_score  || 0;
+    document.getElementById('maxWaveVal').textContent   = local.max_wave   || 0;
+    document.getElementById('lastScoreVal').textContent = local.last_score || 0;
+    document.getElementById('lastWaveVal').textContent  = local.last_wave  || 0;
+
+    // Exibe o status de sincronização
+    const syncStatusEl = document.getElementById('syncStatusText');
+    if (syncStatusEl) {
+      if (local.lastSyncedAt) {
+        const d = new Date(local.lastSyncedAt);
+        const dateStr = d.toLocaleDateString('pt-BR');
+        const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        syncStatusEl.textContent = `LAST SYNC: ${dateStr} ${timeStr}`;
+        syncStatusEl.style.color = local.pendingSync ? '#FFD700' : '#555';
+      } else {
+        syncStatusEl.textContent = 'NUNCA SINCRONIZADO';
+        syncStatusEl.style.color = '#ff4444';
+      }
+    }
+
+    // Ajusta a cor do botão de acordo com se há dados pendentes
+    const syncBtn = document.getElementById('syncRecordsBtn');
+    if (syncBtn) {
+      syncBtn.disabled  = false;
+      syncBtn.textContent = 'SYNC RECORDS';
+      if (local.pendingSync) {
+        syncBtn.style.borderColor = '#FFD700';
+        syncBtn.style.color       = '#FFD700';
+      } else {
+        syncBtn.style.borderColor = '#00ff88';
+        syncBtn.style.color       = '#00ff88';
+      }
+    }
   } else {
     guestEl.classList.remove('hidden');
     loggedEl.classList.add('hidden');
@@ -517,13 +495,11 @@ function _renderMenu() {
     document.getElementById('logoutBtn').onclick = (e) => {
       e.stopPropagation();
       GameUI.showConfirm('DESEJA REALMENTE SAIR?', async () => {
-        // 1. Atualização Otimista: Remove sessão localmente e renderiza Menu GUEST
+        // Limpa o estado local e re-renderiza o menu como GUEST imediatamente.
+        // O signOut (rede) é fire-and-forget — a UI não fica esperando.
         updateState({ session: null, userProfile: null });
         _renderMenu();
-
-        // 2. Fire-and-forget de rede (sem awaits para não travar o modal)
-        enqueueSyncScore('Logout');
-        signOut().catch(err => console.warn('[Auth] Falha ignorada no signOut em background:', err));
+        signOut().catch(err => console.warn('[Auth] Falha ignorada no signOut:', err));
       });
     };
 
@@ -532,23 +508,43 @@ function _renderMenu() {
       GameUI.showConfirm(
         'TEM CERTEZA QUE DESEJA ZERAR OS DADOS?<br>NÃO HAVERÁ COMO RECUPERAR O REGISTRO',
         async () => {
-          // Atualização Otimista: zera tudo localmente e renderiza imediatamente
-          updateState({
-            userProfile: { ...state.userProfile, max_score: 0, max_wave: 0, last_score: 0, last_wave: 0 },
-            syncError: null,
-          });
+          // Zera o localStorage local e re-renderiza com zeros imediatamente.
+          // O banco será zerado quando o usuário clicar em SYNC RECORDS.
+          const cleared = clearLocalProgress(state.session.user.id);
+          updateState({ userProfile: cleared, syncError: null });
           _renderMenu();
-
-          // Enfileira em background (fire and forget)
-          SyncQueue.enqueue(
-            'ClearHistory',
-            async () => {
-              await clearUserHistory(state.session.user.id);
-            },
-            SyncQueue.currentSessionId,
-          );
         },
       );
+    };
+
+    document.getElementById('syncRecordsBtn').onclick = async () => {
+      const btn      = document.getElementById('syncRecordsBtn');
+      const statusEl = document.getElementById('syncStatusText');
+      const userId   = state.session?.user?.id;
+      if (!userId) return;
+
+      const localData = loadLocalProgress(userId);
+
+      btn.disabled    = true;
+      btn.textContent = 'SINCRONIZANDO...';
+      if (statusEl) { statusEl.textContent = 'CONECTANDO AO BANCO...'; statusEl.style.color = '#aaa'; }
+
+      try {
+        await persistScore(
+          userId,
+          localData?.last_score || 0,
+          localData?.last_wave  || 0,
+          { max_score: localData?.max_score || 0, max_wave: localData?.max_wave || 0 },
+        );
+        const updated = markSynced();
+        updateState({ userProfile: updated, syncError: null });
+        _renderMenu(); // re-renderiza com novo timestamp
+      } catch (err) {
+        console.error('[Sync] Falha no SYNC RECORDS:', err.message);
+        btn.disabled    = false;
+        btn.textContent = 'SYNC RECORDS';
+        if (statusEl) { statusEl.textContent = 'FALHA — TENTE NOVAMENTE'; statusEl.style.color = '#ff4444'; }
+      }
     };
   } else {
     document.getElementById('loginGoogleBtn').onclick = () => signInWithGoogle();
@@ -556,49 +552,19 @@ function _renderMenu() {
   }
 }
 
-/**
- * Aguarda SYNC_DONE ou um timeout, o que ocorrer primeiro.
- * Usado antes de operações que dependem do banco estar atualizado.
- */
-function _waitSyncOrTimeout(ms) {
-  if (!SyncQueue.busy) return Promise.resolve();
-
-  return new Promise(resolve => {
-    let timer = setTimeout(() => {
-      EventBus.off('SYNC_DONE', onEvent);
-      EventBus.off('SYNC_FAILED', onEvent);
-      console.warn(`[Sync] Timeout de espera pela fila (${ms}ms)`);
-      resolve();
-    }, ms);
-
-    const onEvent = () => {
-      // Resolvemos apenas quando a fila estiver vazia (ou ociosa)
-      if (!SyncQueue.busy) {
-        clearTimeout(timer);
-        EventBus.off('SYNC_DONE', onEvent);
-        EventBus.off('SYNC_FAILED', onEvent);
-        resolve();
-      }
-    };
-
-    EventBus.on('SYNC_DONE', onEvent);
-    EventBus.on('SYNC_FAILED', onEvent);
-  });
-}
-
 // ─────────────────────────────────────────────────────────────
 // Auth Listener — Camada 4
 // Escuta o Supabase e emite AUTH_EVENT no bus.
 // A FSM decide o que fazer — nenhum reset() direto aqui.
 // ─────────────────────────────────────────────────────────────
-supabase.auth.onAuthStateChange(async (event, session) => {
+supabase?.auth.onAuthStateChange(async (event, session) => {
   console.log('[Auth] Evento:', event);
 
   // TOKEN_REFRESHED é silencioso — não interrompe o jogo em nenhuma hipótese
   if (event === 'TOKEN_REFRESHED') return;
 
-  // Limpa parâmetros OAuth da URL após redirect bem-sucedido
-  if (event === 'SIGNED_IN' && (window.location.hash || window.location.search.includes('access_token'))) {
+  // Limpa qualquer parâmetro OAuth da URL após redirect (hash e query string)
+  if (event === 'SIGNED_IN' && (window.location.hash || window.location.search)) {
     history.replaceState(null, '', window.location.pathname);
   }
 
@@ -606,15 +572,23 @@ supabase.auth.onAuthStateChange(async (event, session) => {
   updateState({ session });
 
   if (session) {
-    const profile = await getUserProfile(session.user.id).catch(err => {
-      console.warn('[Auth] Falha ao carregar perfil:', err.message);
-      return null;
-    });
-    updateState({ userProfile: profile, syncError: null });
-    await processPendingResets().catch(() => {});
+    // Tenta usar dados locais primeiro (sem chamada de rede)
+    const localData = loadLocalProgress(session.user.id);
+    if (localData) {
+      updateState({ userProfile: localData, syncError: null });
+    } else {
+      // Primeiro login ou dispositivo diferente — busca do banco e inicializa o cache local
+      const profile = await getUserProfile(session.user.id).catch(err => {
+        console.warn('[Auth] Falha ao carregar perfil do banco:', err.message);
+        return null;
+      });
+      const seeded = profile
+        ? seedFromDatabase(session.user.id, profile)
+        : null;
+      updateState({ userProfile: seeded, syncError: null });
+    }
   } else {
     updateState({ userProfile: null, syncError: null });
-    SyncQueue.clear(); // Descarta tarefas de sessão encerrada
   }
 
   updateHUD();
@@ -623,18 +597,9 @@ supabase.auth.onAuthStateChange(async (event, session) => {
   const isMeaningfulChange = event === 'SIGNED_IN' || event === 'SIGNED_OUT' || (!session && prevUserId);
   if (isMeaningfulChange) {
     if (GameFSM.state === 'MENU') {
-      // Já no menu — apenas re-renderiza com dados novos
       _renderMenu();
     } else if (GameFSM.canTransition('MENU')) {
       GameFSM.transition('MENU');
-    } else {
-      // Estava em estado intermediário (SYNCING, etc.) — aguarda e redireciona
-      const done = () => {
-        EventBus.off('FSM_MENU', done);
-        EventBus.off('FSM_WAVE_END', done);
-        EventBus.off('FSM_GAME_OVER', done);
-      };
-      EventBus.on('FSM_MENU', done);
     }
   }
 });
@@ -644,7 +609,6 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 // ─────────────────────────────────────────────────────────────
 const Game = {
   start() {
-    SyncQueue.newSession();
     updateState({ score: 0, paused: false });
     hideOverlay();
     document.getElementById('pauseIndicator').classList.add('hidden');
@@ -666,7 +630,6 @@ const Game = {
   },
 
   jumpToBoss(wave) {
-    SyncQueue.newSession();
     hideOverlay();
     initWave(wave);
     state.isBossDebugRun = wave;
@@ -685,16 +648,15 @@ const Game = {
     stopLoop();
     updateState({ over: true });
 
-    // Se já estamos em um estado final (GAME_OVER ou WAVE_END), o score já foi sincronizado.
+    // Salva localmente se saiu no meio de uma partida com score (sem passar por game over/wave end)
     const isGameOverOrWaveEnd = GameFSM.state === 'GAME_OVER' || GameFSM.state === 'WAVE_END';
-
     if (!isGameOverOrWaveEnd && state.score > 0 && state.session) {
-      enqueueSyncScore('BackToMenu');
-      GameFSM.transition('SYNCING', { next: 'MENU' });
-    } else if (GameFSM.canTransition('MENU')) {
+      _saveLocalScore('BackToMenu');
+    }
+
+    if (GameFSM.canTransition('MENU')) {
       GameFSM.transition('MENU');
     } else {
-      // Força transição caso a FSM esteja em um estado inesperado (ex: SYNC_ERROR)
       GameFSM.forceState('GAME_OVER');
       GameFSM.transition('MENU');
     }
@@ -723,6 +685,21 @@ window.GameTest = {
 // Boot
 // ─────────────────────────────────────────────────────────────
 initInput();
+
+// Inicializa o editor inline de username no HUD (uma única vez)
+initUsernameEdit(async (newUsername) => {
+  if (!state.session) return;
+  const userId = state.session.user.id;
+
+  // Atualiza local imediatamente
+  const updated = updateLocalUsername(userId, newUsername);
+  if (updated) updateState({ userProfile: updated });
+  updateHUD();
+
+  // Envia ao Supabase em background (sem travar a UI)
+  updateUsername(userId, newUsername)
+    .catch(err => console.warn('[Auth] Falha ao salvar username no banco:', err.message));
+});
 
 // Inicializa no MENU — o onAuthStateChange vai popular os dados de auth
 // e chamar _renderMenu() quando a sessão for resolvida.

@@ -22,9 +22,9 @@ import { EventBus } from './EventBus.js';
 // Mapa de transições válidas: estado atual → estados permitidos
 const TRANSITIONS = {
   MENU:      ['PLAYING'],
-  PLAYING:   ['PAUSED', 'SYNCING', 'GAME_OVER'],
-  PAUSED:    ['PLAYING', 'SYNCING', 'MENU'],
-  SYNCING:   ['WAVE_END', 'GAME_OVER', 'MENU'],
+  PLAYING:   ['PAUSED', 'GAME_OVER', 'WAVE_END', 'MENU'],
+  PAUSED:    ['PLAYING', 'MENU'],
+  SYNCING:   ['WAVE_END', 'GAME_OVER', 'MENU'], // mantido mas não usado no fluxo do jogo
   WAVE_END:  ['PLAYING', 'MENU'],
   GAME_OVER: ['PLAYING', 'MENU'],
 };

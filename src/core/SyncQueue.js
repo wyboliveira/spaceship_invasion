@@ -16,8 +16,8 @@
 import { EventBus } from './EventBus.js';
 
 const MAX_ATTEMPTS    = 3;
-const TASK_TIMEOUT_MS = 20000; // 20s para acomodar latência de rede e DB
-const BACKOFF_BASE_MS = 1000; // 1s, 2s, 4s...
+const TASK_TIMEOUT_MS = 12000; // 12s — cobre cold start do free tier (~10s) sem segurar UI por demais
+const BACKOFF_BASE_MS = 2000;  // 2s, 4s, 8s — espera maior entre retries para o DB acordar
 
 let _queue      = [];
 let _processing = false;
