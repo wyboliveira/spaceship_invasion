@@ -65,6 +65,7 @@ export function seedFromDatabase(userId, dbProfile) {
   const data = {
     userId,
     username:       dbProfile.username   || null,
+    role:           dbProfile.role       || 'player',
     max_score:      dbProfile.max_score  || 0,
     max_wave:       dbProfile.max_wave   || 0,
     last_score:     dbProfile.last_score || 0,

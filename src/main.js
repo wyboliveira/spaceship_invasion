@@ -478,13 +478,22 @@ function _renderMenu() {
     loggedEl.classList.add('hidden');
   }
 
-  // Boss Debug - rebuild only if needed or just toggle it
-  const bossDebugContainer = document.getElementById('bossDebugContainer');
-  if (bossDebugContainer) {
-    bossDebugContainer.innerHTML = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(w => `
-      <button class="debug-btn" onclick="Game.jumpToBoss(${w})"
-        style="background:#222; color:#aaa; border:1px solid #444; padding:3px 6px; cursor:pointer; font-size:10px;">W${w}</button>
-    `).join('');
+  // Boss Debug — exclusivo para role=admin
+  const bossDebugEl = document.getElementById('bossDebug');
+  const isAdmin = state.userProfile?.role === 'admin';
+  if (bossDebugEl) {
+    if (isAdmin) {
+      bossDebugEl.classList.remove('hidden');
+      const bossDebugContainer = document.getElementById('bossDebugContainer');
+      if (bossDebugContainer) {
+        bossDebugContainer.innerHTML = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(w => `
+          <button class="debug-btn" onclick="Game.jumpToBoss(${w})"
+            style="background:#222; color:#aaa; border:1px solid #444; padding:3px 6px; cursor:pointer; font-size:10px;">W${w}</button>
+        `).join('');
+      }
+    } else {
+      bossDebugEl.classList.add('hidden');
+    }
   }
 
   showScreen('screen-menu');
@@ -576,16 +585,24 @@ supabase?.auth.onAuthStateChange(async (event, session) => {
     const localData = loadLocalProgress(session.user.id);
     if (localData) {
       updateState({ userProfile: localData, syncError: null });
-    } else {
-      // Primeiro login ou dispositivo diferente — busca do banco e inicializa o cache local
-      const profile = await getUserProfile(session.user.id).catch(err => {
-        console.warn('[Auth] Falha ao carregar perfil do banco:', err.message);
-        return null;
-      });
+    }
+
+    // Role é permissão de servidor — sempre busca do banco para garantir valor atual.
+    // Score/wave continuam vindo do cache local se disponível.
+    const profile = await getUserProfile(session.user.id).catch(err => {
+      console.warn('[Auth] Falha ao carregar perfil do banco:', err.message);
+      return null;
+    });
+
+    if (!localData) {
+      // Primeiro login ou dispositivo diferente — inicializa o cache local com dados do banco
       const seeded = profile
         ? seedFromDatabase(session.user.id, profile)
         : null;
       updateState({ userProfile: seeded, syncError: null });
+    } else if (profile) {
+      // Atualiza apenas o role no estado (role sempre vem do banco, não do cache)
+      updateState({ userProfile: { ...state.userProfile, role: profile.role || 'player' }, syncError: null });
     }
   } else {
     updateState({ userProfile: null, syncError: null });
