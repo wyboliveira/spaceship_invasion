@@ -82,13 +82,13 @@ O projeto usa uma arquitetura em 4 camadas onde cada arquivo tem uma responsabil
 
 ```
                     ┌────────────┐
-          ┌────────▶│    MENU    │◀────────────────┐
+          ┌────────▶│    MENU    │◀───────────────┐
           │         └─────┬──────┘                 │
           │               │ start()                │
           │               ▼                        │
           │         ┌────────────┐  game over      │
           │  back   │  PLAYING   │────────────────▶│
-          │◀────────│            │                 │
+     RESET GAME ◀──│            │                  │
           │         │            │  wave clear     │
           │         └─────┬──────┴──────────────┐  │
           │               │ P / pause           │  │
