@@ -16,6 +16,7 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.99.2"
+    "@supabase/supabase-js": "^2.99.2",
+    "howler": "^2.2.4"
   }
 }

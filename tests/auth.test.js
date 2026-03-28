@@ -43,7 +43,7 @@ vi.mock('../src/lib/supabase.js', () => ({
 }));
 
 // Importações dos serviços após o mock ser configurado
-import { signInWithGoogle, signInWithGithub, signOut, getUserProfile, persistScore, updateUsername } from '../src/api/auth.js';
+import { signInWithGoogle, signInWithGithub, signOut, getUserProfile, persistScore, updateUsername, getLeaderboard } from '../src/api/auth.js';
 
 describe('Auth API', () => {
   beforeEach(() => {
@@ -60,10 +60,13 @@ describe('Auth API', () => {
     }));
   });
 
-  it('deve chamar signInWithOAuth para GitHub', async () => {
+  it('deve chamar signInWithOAuth para GitHub com prompt select_account', async () => {
     await signInWithGithub();
     expect(mocks.mockSignInWithOAuth).toHaveBeenCalledWith(expect.objectContaining({
-      provider: 'github'
+      provider: 'github',
+      options: expect.objectContaining({
+        queryParams: expect.objectContaining({ prompt: 'select_account' }),
+      }),
     }));
   });
 
@@ -114,5 +117,64 @@ describe('Auth API', () => {
       expect.objectContaining({ username: 'NovaEstrela' }),
     );
     expect(mockEq).toHaveBeenCalledWith('id', '123');
+  });
+
+  describe('getLeaderboard', () => {
+    /** Monta a cadeia fluente: .select().gt().order().limit() */
+    function mockLeaderboardChain(resolvedValue) {
+      const mockLimit = vi.fn().mockResolvedValue(resolvedValue);
+      const mockOrder = vi.fn(() => ({ limit: mockLimit }));
+      const mockGt    = vi.fn(() => ({ order: mockOrder }));
+      const mockSel   = vi.fn(() => ({ gt: mockGt }));
+      mocks.mockFrom.mockReturnValueOnce({ select: mockSel });
+      return { mockSel, mockGt, mockOrder, mockLimit };
+    }
+
+    it('deve retornar lista de jogadores ordenada por max_score', async () => {
+      const leaderboardData = [
+        { username: 'Fulano',  max_score: 5000, max_wave: 10 },
+        { username: 'Cicrano', max_score: 3000, max_wave: 7  },
+      ];
+      mockLeaderboardChain({ data: leaderboardData, error: null });
+
+      const result = await getLeaderboard();
+      expect(result).toEqual(leaderboardData);
+      expect(result).toHaveLength(2);
+    });
+
+    it('deve filtrar score zero via .gt("max_score", 0)', async () => {
+      const { mockGt } = mockLeaderboardChain({ data: [], error: null });
+
+      await getLeaderboard();
+      expect(mockGt).toHaveBeenCalledWith('max_score', 0);
+    });
+
+    it('deve limitar a 50 registros via .limit(50)', async () => {
+      const { mockLimit } = mockLeaderboardChain({ data: [], error: null });
+
+      await getLeaderboard();
+      expect(mockLimit).toHaveBeenCalledWith(50);
+    });
+
+    it('deve ordenar por max_score descendente', async () => {
+      const { mockOrder } = mockLeaderboardChain({ data: [], error: null });
+
+      await getLeaderboard();
+      expect(mockOrder).toHaveBeenCalledWith('max_score', { ascending: false });
+    });
+
+    it('deve lançar erro quando Supabase retorna error', async () => {
+      const supabaseError = { message: 'Erro de conexão', code: '500' };
+      mockLeaderboardChain({ data: null, error: supabaseError });
+
+      await expect(getLeaderboard()).rejects.toEqual(supabaseError);
+    });
+
+    it('deve retornar array vazio quando não há dados', async () => {
+      mockLeaderboardChain({ data: null, error: null });
+
+      const result = await getLeaderboard();
+      expect(result).toEqual([]);
+    });
   });
 });

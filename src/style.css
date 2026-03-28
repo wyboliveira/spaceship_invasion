@@ -158,6 +158,167 @@ body::before {
 }
 .press-start:hover { background: var(--accent); color: #000; box-shadow: 0 0 24px var(--accent); }
 
+/* ── Leaderboard ──────────────────────────────────────────── */
+
+.lb-header,
+.lb-row {
+  display: flex;
+  align-items: baseline;
+  width: 700px;
+  gap: 0;
+  padding: 0 4px;
+}
+
+.lb-header {
+  border-bottom: 1px solid #1a2a3a;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #556;
+  text-transform: uppercase;
+}
+
+.lb-row {
+  padding: 4px 4px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #0d1520;
+  transition: background 0.1s;
+}
+
+.lb-row:hover { background: rgba(0,240,255,0.04); }
+
+/* Linha destacada — usuário atual */
+.lb-row.lb-self {
+  background: rgba(0,240,255,0.07);
+  border-color: rgba(0,240,255,0.15);
+}
+.lb-row.lb-self .lb-col-name { color: var(--accent); }
+
+/* Pódio */
+.lb-row.lb-gold   .lb-col-pos { color: #FFD700; }
+.lb-row.lb-silver .lb-col-pos { color: #C0C0C0; }
+.lb-row.lb-bronze .lb-col-pos { color: #CD7F32; }
+
+/* Colunas */
+.lb-col-pos {
+  width: 32px;
+  flex-shrink: 0;
+  text-align: right;
+  color: #445;
+  padding-right: 10px;
+}
+
+.lb-col-name {
+  width: 140px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+/* Dots — preenche o espaço entre nome e score */
+.lb-col-fill {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  color: #1e2e3e;
+  padding: 0 6px;
+  /* conteúdo gerado via JS com caracteres ". " repetidos */
+}
+
+.lb-col-score {
+  width: 80px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--accent3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lb-col-wave {
+  width: 48px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--green);
+  padding-left: 10px;
+  white-space: nowrap;
+}
+
+.lb-list {
+  width: 700px;
+  min-height: 200px; /* evita salto de layout durante carregamento */
+}
+
+.lb-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.lb-nav-btn {
+  font-family: 'Orbitron', monospace;
+  font-size: 15px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lb-nav-btn:hover:not(:disabled) { background: var(--accent); color: #000; }
+.lb-nav-btn:disabled { opacity: 0.2; cursor: default; }
+
+/* ── Botão Liga/Desliga Música ───────────────────────────────── */
+
+.music-toggle-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: 1px solid #1e2e3e;
+  border-radius: 3px;
+  color: var(--accent);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  user-select: none;
+  align-self: flex-end;
+}
+
+.music-toggle-btn:hover {
+  border-color: var(--accent);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+/* Estado desligado: ícone esmaecido */
+.music-toggle-btn.music-muted {
+  color: var(--accent);
+  border-color: #1a1a1a;
+}
+
+/* Traço diagonal vermelho por cima do ♫ quando desligado */
+.music-toggle-btn.music-muted::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150%;
+  height: 2px;
+  background: var(--accent2);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  border-radius: 1px;
+}
+
 .footer-hints {
   width: 858px; display: flex; justify-content: center;
   gap: 28px; font-size: 1.0rem; color: var(--dim); letter-spacing: 2px; padding-top: 2px;

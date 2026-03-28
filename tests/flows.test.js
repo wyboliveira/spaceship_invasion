@@ -7,7 +7,7 @@
  * Supabase somente quando o usuário clica em SYNC RECORDS.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { signInWithGoogle } from '../src/api/auth.js';
+import { signInWithGoogle, getLeaderboard } from '../src/api/auth.js';
 import { supabase } from '../src/lib/supabase.js';
 import {
   saveLocalProgress,
@@ -81,6 +81,39 @@ describe('Fluxos de Integração', () => {
     const updated = markSynced();
     expect(updated.pendingSync).toBe(false);
     expect(updated.lastSyncedAt).not.toBeNull();
+  });
+
+  it('Fluxo 5: Leaderboard retorna apenas jogadores com score maior que zero', async () => {
+    const leaderboardData = [
+      { username: 'Fulano',  max_score: 5000, max_wave: 10 },
+      { username: 'Cicrano', max_score: 1200, max_wave: 4  },
+    ];
+    // Monta a cadeia fluente do Supabase: select().gt().order().limit()
+    const mockLimit = vi.fn().mockResolvedValue({ data: leaderboardData, error: null });
+    const mockOrder = vi.fn(() => ({ limit: mockLimit }));
+    const mockGt    = vi.fn(() => ({ order: mockOrder }));
+    vi.mocked(supabase.from).mockReturnValueOnce({
+      select: vi.fn(() => ({ gt: mockGt })),
+    });
+
+    const result = await getLeaderboard();
+
+    // Filtragem de score zero é garantida pelo .gt('max_score', 0)
+    expect(mockGt).toHaveBeenCalledWith('max_score', 0);
+    expect(result).toHaveLength(2);
+    expect(result[0].username).toBe('Fulano');
+  });
+
+  it('Fluxo 6: Leaderboard retorna array vazio quando banco não tem registros com score > 0', async () => {
+    const mockLimit = vi.fn().mockResolvedValue({ data: [], error: null });
+    const mockOrder = vi.fn(() => ({ limit: mockLimit }));
+    const mockGt    = vi.fn(() => ({ order: mockOrder }));
+    vi.mocked(supabase.from).mockReturnValueOnce({
+      select: vi.fn(() => ({ gt: mockGt })),
+    });
+
+    const result = await getLeaderboard();
+    expect(result).toEqual([]);
   });
 
   it('Fluxo 4: Zerar histórico zeroa localStorage e marca pendingSync (banco fica para o SYNC)', () => {

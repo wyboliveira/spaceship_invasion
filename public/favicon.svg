@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- glow externo -->
+  <defs>
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- fundo escuro -->
+  <rect width="32" height="32" fill="#03050f" rx="4"/>
+
+  <!-- chama do motor -->
+  <polygon points="13,24 16,30 19,24" fill="#ff3d6b" opacity="0.9" filter="url(#neon)"/>
+  <polygon points="14.5,23 16,27 17.5,23" fill="#ffe600" opacity="0.8"/>
+
+  <!-- corpo da nave -->
+  <polygon points="16,4 21,20 16,18 11,20" fill="#00f0ff" filter="url(#neon)"/>
+
+  <!-- asa esquerda -->
+  <polygon points="11,20 7,24 11,22" fill="#00c8d4"/>
+
+  <!-- asa direita -->
+  <polygon points="21,20 25,24 21,22" fill="#00c8d4"/>
+
+  <!-- cockpit -->
+  <ellipse cx="16" cy="12" rx="2.2" ry="3" fill="#001820"/>
+  <ellipse cx="16" cy="12" rx="1.2" ry="1.8" fill="#00f0ff" opacity="0.35"/>
+</svg>

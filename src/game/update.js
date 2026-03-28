@@ -50,6 +50,7 @@ export function update(dt, ts) {
       cfg.playerBulletSpd,
     );
     state.bullets.push(...pattern);
+    EventBus.emit('SFX_PLAYER_SHOOT');
   }
 
   // ── Balas do jogador — movimento e colisões ───────────────
@@ -79,6 +80,7 @@ export function update(dt, ts) {
           state.score += 5000 * (state.wave / 10);
           spawnParticles(boss.x + PHYSICS.BOSS_W/2, boss.y + PHYSICS.BOSS_H/2, boss.neon ? '#00ffff' : '#ff0044', 40);
           EventBus.emit('GAME_UPDATE_HUD');
+          EventBus.emit('GAME_BOSS_DEFEATED', { wave: state.wave });
           // Se foi iniciado pelo debug de boss, mostra mensagem especial
           if (state.isBossDebugRun) {
             EventBus.emit('GAME_BOSS_TEST_COMPLETE', state.wave);
@@ -103,6 +105,7 @@ export function update(dt, ts) {
 
         if (e.hp <= 0) {
           e.alive = false;
+          EventBus.emit('SFX_ENEMY_DIE');
           const pts = (SCORING.POINTS_BY_ROW[e.row] ?? 10) * state.wave;
           state.score += e.elite ? pts * SCORING.ELITE_MULTIPLIER : pts;
 
@@ -288,6 +291,9 @@ export function update(dt, ts) {
   }
 
   // ── Vitória ───────────────────────────────────────────────
+  // Guard: evita re-execução no mesmo frame em que o boss foi derrotado
+  // (GAME_WAVE_CLEAR seta state.over=true de forma síncrona mas update() continua)
+  if (state.over) return;
   if (alive.length === 0 && !state.boss.active) {
     if (state.drops.length > 0) {
       // Acabaram os inimigos, mas ainda há drops. Trave o avanço e ligue o ímã!
@@ -301,6 +307,7 @@ export function update(dt, ts) {
       // Checa se deve spawnar Boss (a cada 10 fases)
       if (BOSS_CONFIGS[state.wave]) {
         createBoss(state.wave, BOSS_CONFIGS);
+        EventBus.emit('GAME_BOSS_SPAWN', { wave: state.wave });
       } else {
         EventBus.emit('GAME_WAVE_CLEAR');
       }
@@ -322,6 +329,7 @@ export function update(dt, ts) {
 
 function onPlayerHit() {
   state.lives--;
+  EventBus.emit('SFX_PLAYER_HIT');
   state.flashTimer = VISUAL.HIT_FLASH_DURATION;
   state.weaponLevel = applyWeaponPenalty(state.weaponLevel);
 
@@ -336,6 +344,7 @@ function onPlayerHit() {
 }
 
 function collectDrop(drop) {
+  EventBus.emit('SFX_DROP_COLLECT');
   if (drop.type === 'weapon') {
     if (state.weaponLevel < WEAPON.MAX_LEVEL) {
       state.weaponLevel++;

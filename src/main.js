@@ -34,14 +34,16 @@ import { supabase }                      from './lib/supabase.js';
 import {
   signInWithGoogle, signInWithGithub, signOut,
   getUserProfile, persistScore, updateUsername,
+  getLeaderboard,
 } from './api/auth.js';
 import {
   saveLocalProgress, loadLocalProgress,
   seedFromDatabase, markSynced, clearLocalProgress,
   updateLocalUsername,
 } from './lib/localStore.js';
-import { EventBus }  from './core/EventBus.js';
-import { GameFSM }   from './core/GameFSM.js';
+import { EventBus }     from './core/EventBus.js';
+import { GameFSM }      from './core/GameFSM.js';
+import { AudioManager } from './audio/AudioManager.js';
 
 // ─────────────────────────────────────────────────────────────
 // Canvas
@@ -234,8 +236,9 @@ const GameUI = {
    * Transição: PLAYING → GAME_OVER (score salvo localmente, sem espera de rede)
    */
   triggerGameOver() {
-    updateState({ over: true });
+    updateState({ over: true, particles: [] });
     stopLoop();
+    ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
     _saveLocalScore('GameOver');
     GameFSM.transition('GAME_OVER');
   },
@@ -246,8 +249,9 @@ const GameUI = {
    * Transição: PLAYING → WAVE_END (score salvo localmente, sem espera de rede)
    */
   showWaveClear() {
-    updateState({ over: true });
+    updateState({ over: true, particles: [] });
     stopLoop();
+    ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
     _saveLocalScore('WaveClear');
     GameFSM.transition('WAVE_END');
   },
@@ -559,7 +563,146 @@ function _renderMenu() {
     document.getElementById('loginGoogleBtn').onclick = () => signInWithGoogle();
     document.getElementById('loginGithubBtn').onclick = () => signInWithGithub();
   }
+
+  document.getElementById('rankingBtn').onclick = () => Leaderboard.open();
 }
+
+// ─────────────────────────────────────────────────────────────
+// Leaderboard
+// ─────────────────────────────────────────────────────────────
+const LB_PER_PAGE = 10;
+let _lbData = [];
+let _lbPage = 0;
+
+const DOTS = '. '.repeat(60); // overflow hidden faz o clip automaticamente
+
+/** Rejeita a promise se não resolver dentro de `ms` milissegundos. */
+function _lbWithTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout após ${ms}ms — banco pode estar acordando, tente novamente`)), ms)
+    ),
+  ]);
+}
+
+const Leaderboard = {
+  async open() {
+    _lbPage = 0;
+    showScreen('screen-leaderboard');
+    this._bindButtons();
+    await this._fetch();
+  },
+
+  _bindButtons() {
+    document.getElementById('lbBackBtn').onclick  = () => { showScreen('screen-menu'); _renderMenu(); };
+    document.getElementById('lbPrevBtn').onclick  = () => { _lbPage--; this._render(); };
+    document.getElementById('lbNextBtn').onclick  = () => { _lbPage++; this._render(); };
+    document.getElementById('lbSyncBtn').onclick  = () => this._sync();
+  },
+
+  async _fetch() {
+    const statusEl = document.getElementById('lbStatus');
+    const listEl   = document.getElementById('lbList');
+    listEl.innerHTML = '';
+    statusEl.textContent = 'CARREGANDO...';
+    statusEl.style.color = '#555';
+
+    try {
+      _lbData = await _lbWithTimeout(getLeaderboard(), 12000);
+      statusEl.textContent = '';
+      this._render();
+    } catch (err) {
+      console.error('[Leaderboard] Erro ao buscar dados:', err.message);
+      statusEl.textContent = err.message.startsWith('Timeout')
+        ? 'BANCO ACORDANDO — AGUARDE E TENTE NOVAMENTE'
+        : 'FALHA AO CARREGAR — VERIFIQUE A CONEXÃO';
+      statusEl.style.color = '#ff4444';
+    }
+  },
+
+  _render() {
+    const listEl    = document.getElementById('lbList');
+    const pageInfo  = document.getElementById('lbPageInfo');
+    const prevBtn   = document.getElementById('lbPrevBtn');
+    const nextBtn   = document.getElementById('lbNextBtn');
+
+    const totalPages = Math.max(1, Math.ceil(_lbData.length / LB_PER_PAGE));
+    _lbPage = Math.max(0, Math.min(_lbPage, totalPages - 1));
+
+    const slice = _lbData.slice(_lbPage * LB_PER_PAGE, (_lbPage + 1) * LB_PER_PAGE);
+    const currentUsername = state.userProfile?.username || state.session?.user?.email?.split('@')[0];
+
+    listEl.innerHTML = slice.map((row, i) => {
+      const pos      = _lbPage * LB_PER_PAGE + i + 1;
+      const name     = (row.username || 'ANÔNIMO').slice(0, 20).toUpperCase();
+      const score    = (row.max_score || 0).toLocaleString('pt-BR');
+      const wave     = String(row.max_wave || 0).padStart(2, '0');
+      const isSelf   = currentUsername && name === currentUsername.toUpperCase();
+      const podium   = pos === 1 ? 'lb-gold' : pos === 2 ? 'lb-silver' : pos === 3 ? 'lb-bronze' : '';
+      const selfCls  = isSelf ? 'lb-self' : '';
+
+      return `
+        <div class="lb-row ${podium} ${selfCls}">
+          <span class="lb-col-pos">${pos}</span>
+          <span class="lb-col-name" title="${name}">${name}</span>
+          <span class="lb-col-fill">${DOTS}</span>
+          <span class="lb-col-score">${score}</span>
+          <span class="lb-col-wave">${wave}</span>
+        </div>`;
+    }).join('');
+
+    if (_lbData.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center; color:#334; font-size:11px; padding:30px 0; letter-spacing:2px;">NENHUM REGISTRO ENCONTRADO</div>';
+    }
+
+    pageInfo.textContent = `${_lbPage + 1} / ${totalPages}`;
+    prevBtn.disabled = _lbPage === 0;
+    nextBtn.disabled = _lbPage >= totalPages - 1;
+  },
+
+  async _sync() {
+    const btn      = document.getElementById('lbSyncBtn');
+    const statusEl = document.getElementById('lbStatus');
+    const userId   = state.session?.user?.id;
+    if (!userId) {
+      statusEl.textContent = 'FAÇA LOGIN PARA SINCRONIZAR';
+      statusEl.style.color = '#ff4444';
+      return;
+    }
+
+    const localData = loadLocalProgress(userId);
+    btn.disabled    = true;
+    btn.textContent = 'SINCRONIZANDO...';
+    statusEl.textContent = 'ENVIANDO DADOS...';
+    statusEl.style.color = '#aaa';
+
+    try {
+      await _lbWithTimeout(
+        persistScore(
+          userId,
+          localData?.last_score || 0,
+          localData?.last_wave  || 0,
+          { max_score: localData?.max_score || 0, max_wave: localData?.max_wave || 0 },
+        ),
+        12000,
+      );
+      markSynced();
+      statusEl.textContent = 'SINCRONIZADO — ATUALIZANDO RANKING...';
+      statusEl.style.color = '#00ff88';
+      await this._fetch();
+    } catch (err) {
+      console.error('[Leaderboard] Falha no sync:', err.message);
+      statusEl.textContent = err.message.startsWith('Timeout')
+        ? 'BANCO ACORDANDO — TENTE NOVAMENTE EM INSTANTES'
+        : 'FALHA NA SINCRONIZAÇÃO';
+      statusEl.style.color = '#ff4444';
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'SYNC RECORDS';
+    }
+  },
+};
 
 // ─────────────────────────────────────────────────────────────
 // Auth Listener — Camada 4
@@ -702,6 +845,22 @@ window.GameTest = {
 // Boot
 // ─────────────────────────────────────────────────────────────
 initInput();
+AudioManager.init();
+
+// Botão Liga/Desliga Música
+// (o FSM_MENU dispara música apenas em transições; no primeiro load a tela
+//  de menu é montada diretamente por _renderMenu() sem passar pela FSM.
+//  Por isso iniciamos a música aqui explicitamente.)
+AudioManager.playMusic('menu');
+
+const _musicBtn = document.getElementById('musicToggleBtn');
+if (_musicBtn) {
+  _musicBtn.addEventListener('click', () => {
+    if (typeof AudioManager.setMusicMuted !== 'function') return;
+    const muted = AudioManager.setMusicMuted();
+    _musicBtn.classList.toggle('music-muted', muted);
+  });
+}
 
 // Inicializa o editor inline de username no HUD (uma única vez)
 initUsernameEdit(async (newUsername) => {
