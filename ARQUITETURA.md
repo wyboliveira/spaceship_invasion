@@ -8,10 +8,19 @@ spaceship_invasion/
 ├── package.json
 ├── vite.config.js
 │
+├── public/
+│   ├── favicon.svg                   ← Ícone neon da nave
+│   ├── music/                        ← Trilhas de fundo (.ogg / .mp3)
+│   └── sfx/                          ← Efeitos sonoros (.ogg / .wav)
+│
 └── src/
     │
     ├── main.js                       ← Orquestrador central
     ├── style.css
+    │
+    ├── audio/                        ← Sistema de áudio (Howler.js)
+    │   ├── audioConfig.js            ← Fonte única de verdade para todos os áudios
+    │   └── AudioManager.js           ← Singleton: reprodução, crossfade, duck, playlist
     │
     ├── core/                         ← Peças centrais de infraestrutura
     │   ├── EventBus.js               ← Pub/sub: desacopla todos os módulos
@@ -21,10 +30,10 @@ spaceship_invasion/
     ├── game/
     │   ├── config.js
     │   ├── helpers.js
-    │   ├── input.js                  ← Atualizado: ignora atalhos quando foco está em <input>
+    │   ├── input.js                  ← Ignora atalhos quando foco está em <input>
     │   ├── sprites.js
     │   ├── state.js
-    │   ├── update.js
+    │   ├── update.js                 ← Emite eventos SFX_* e GAME_BOSS_* via EventBus
     │   └── weapons.js
     │
     ├── api/
@@ -32,10 +41,10 @@ spaceship_invasion/
     │
     ├── lib/
     │   ├── supabase.js               ← Cliente Supabase (exporta null em modo guest)
-    │   └── localStore.js             ← NOVO: cache local de progresso (local-first)
+    │   └── localStore.js             ← Cache local de progresso (local-first)
     │
     └── ui/
-        ├── hud.js                    ← Atualizado: editor inline de username (lápis no HUD)
+        ├── hud.js                    ← Editor inline de username (lápis no HUD)
         └── overlay.js
 ```
 
@@ -49,6 +58,7 @@ spaceship_invasion/
 | 2 — Event Bus | `core/EventBus.js` | Pub/sub. Nenhum módulo chama outro diretamente |
 | 3 — Cache Local | `lib/localStore.js` | Progresso do jogador no localStorage (sem rede) |
 | 3 — I/O Remoto | `api/auth.js` | Todas as chamadas ao Supabase |
+| 3 — Áudio | `audio/AudioManager.js` | Música, SFX, crossfade; reage ao EventBus |
 | 4 — Orquestração | `main.js` | Liga tudo; game loop; listeners de auth e FSM |
 
 ---
@@ -135,6 +145,47 @@ o localStorage local. Se falhar por rede, o fallback remove manualmente todas as
 
 ---
 
+## Sistema de Áudio
+
+### Princípio de design
+
+Todo áudio é configurado em **`audioConfig.js`** — o único arquivo que precisa ser
+editado para trocar um som ou ajustar volume. O `AudioManager.js` lê essa config e
+nunca precisa ser modificado.
+
+### Fluxo de música
+
+```
+FSM_MENU           → playMusic('menu')     — loop simples
+FSM_PLAYING        → playMusic('gameplay') — playlist sequencial (3 faixas)
+GAME_BOSS_SPAWN    → playMusic('boss')     — loop simples, interrompe gameplay
+FSM_WAVE_END       → stopMusic()           (somente se boss estava tocando)
+FSM_PAUSED         → duck 15%             — música continua, volume reduzido
+FSM_GAME_OVER      → duck 15%             — música continua; SFX_GAME_OVER com delay
+FSM_PLAYING(PAUSED)→ unduck               — restaura volume ao retomar
+FSM_PLAYING(GAME_OVER) → reinicia playlist do índice 0
+```
+
+### Playlist de gameplay
+
+- Três faixas (`gameplay_1/2/3.ogg`) tocam em sequência, sem parar entre waves.
+- `onend` de cada Howl avança o índice com wrap-around.
+- A playlist só é reiniciada ao receber `FSM_PLAYING` com `from !== 'WAVE_END'`.
+
+### SFX via EventBus
+
+Todos os eventos `SFX_*` e os eventos de jogo reaproveitados (`GAME_BOSS_SPAWN`,
+`GAME_BOSS_DEFEATED`, `GAME_WAVE_CLEAR`) são escutados automaticamente pelo
+`AudioManager` com base no array `audioConfig.sfx`. Para adicionar um SFX basta
+incluir a entrada no array.
+
+### Botão ♫ (mute de música)
+
+O botão no HUD muta/desmuta somente as músicas (SFX não são afetados).
+Chama `AudioManager.setMusicMuted()` que faz fade instantâneo do Howl ativo.
+
+---
+
 ## O que mudou em relação à arquitetura anterior
 
 ### Removido
@@ -158,3 +209,10 @@ o localStorage local. Se falhar por rede, o fallback remove manualmente todas as
 | `updateLocalUsername()` | `lib/localStore.js` — atualiza username no cache |
 | `initUsernameEdit()` | `ui/hud.js` — editor inline de username |
 | `include/exclude` no vite.config.js | Evita que worktrees do .claude/ sejam incluídas nos testes |
+| `src/audio/audioConfig.js` | Fonte única de verdade para todos os áudios |
+| `src/audio/AudioManager.js` | Singleton de áudio com Howler.js: música, SFX, playlist, duck |
+| `public/music/` e `public/sfx/` | Assets de áudio (.ogg/.mp3/.wav) |
+| `public/favicon.svg` | Ícone neon da nave |
+| Eventos `SFX_*` em `update.js` | Disparam SFX via EventBus sem acoplamento direto |
+| Guard `state.over` em `update.js` | Evita double-emit de GAME_BOSS_SPAWN no mesmo frame |
+| `ctx.clearRect` após `stopLoop()` | Remove resquícios de partículas ao pausar o loop |

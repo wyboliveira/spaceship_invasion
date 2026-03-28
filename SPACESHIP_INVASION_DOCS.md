@@ -10,6 +10,7 @@
 | Bundler | [Vite](https://vitejs.dev/) — módulos ES6, dev server na porta 3000 |
 | Backend-as-a-Service | [Supabase](https://supabase.com/) — Auth OAuth + PostgreSQL |
 | Frontend | Vanilla JavaScript (Canvas API) + CSS com variáveis |
+| Áudio | [Howler.js](https://howlerjs.com/) v2.2.4 — Web Audio API com fallback HTML5 |
 | Testes | [Vitest](https://vitest.dev/) — unitários e integração, ambiente jsdom |
 
 ---
@@ -106,6 +107,7 @@ A suite usa Vitest com ambiente jsdom. Os testes ficam em `tests/` e são separa
 
 ```
 tests/
+├── audio.test.js      ← audioConfig (schema), AudioManager (init, SFX, playlist, FSM)
 ├── auth.test.js       ← OAuth, getUserProfile, persistScore, updateUsername
 ├── history.test.js    ← lib/localStore.js: save, load, seed, clear, markSynced, updateUsername
 ├── flows.test.js      ← Fluxos de integração: partida local, SYNC RECORDS, zerar histórico
@@ -117,7 +119,51 @@ tests/
 └── connection.test.js ← Diagnóstico de latência Supabase (requer rede, não é CI)
 ```
 
+Howler.js é mockado integralmente nos testes de áudio — nenhuma chamada de Web Audio API real.
+Os testes de AudioManager verificam: inicialização, mute/volume, SFX, playlist sequencial,
+resiliência a erros de reprodução e integração com todos os eventos FSM relevantes.
+
 Para rodar: `npm test`
+
+---
+
+## Sistema de Áudio
+
+O áudio usa **Howler.js** com Web Audio API (fallback para HTML5 Audio).
+Toda a configuração fica em `src/audio/audioConfig.js` — para trocar um som,
+basta alterar o campo `src` nesse arquivo. Nenhum outro arquivo precisa ser tocado.
+
+### Músicas
+
+| Trilha | Comportamento |
+|---|---|
+| `menu` | Loop simples na tela inicial |
+| `gameplay` | Playlist sequencial de 3 faixas; persiste entre waves normais |
+| `boss` | Loop durante fase de boss; interrompe gameplay com crossfade |
+
+### Efeitos sonoros (SFX)
+
+Todos os SFX são disparados via EventBus. O `AudioManager` escuta automaticamente
+qualquer evento cujo nome aparece no array `audioConfig.sfx`.
+
+| Evento | Momento |
+|---|---|
+| `SFX_PLAYER_SHOOT` | Ao atirar |
+| `SFX_ENEMY_DIE` | Ao matar um inimigo |
+| `SFX_PLAYER_HIT` | Ao levar dano |
+| `SFX_DROP_COLLECT` | Ao coletar drop |
+| `GAME_BOSS_SPAWN` | Ao entrar na fase de boss |
+| `GAME_BOSS_DEFEATED` | Ao derrotar o boss |
+| `GAME_WAVE_CLEAR` | Ao limpar a wave |
+| `SFX_GAME_OVER` | Com 400ms de delay após game over |
+| `SFX_NORMAL_BUTTON` | Clique em qualquer botão (exceto `data-sfx="none"`) |
+| `SFX_CANCEL_BUTTON` | Clique em botões com `data-sfx="cancel"` |
+
+### Comportamento especial
+
+- **Pause / Game Over**: música reduzida a 15% (duck), sem parar
+- **Retornar do pause**: música restaurada com fade (unduck)
+- **Botão ♫ no HUD**: muta/desmuta somente as músicas; SFX não são afetados
 
 ---
 
@@ -140,6 +186,17 @@ de reiniciar, e "Enter" inicia o jogo antes de salvar o texto.
 O Vitest processa `vi.mock()` antes de qualquer `import`. É necessário usar `vi.hoisted()`
 para criar mocks que serão referenciados dentro do bloco `vi.mock()`.
 
+**Double-emit de evento no mesmo frame**
+Quando o boss morre dentro do loop `.filter()` de balas, `GAME_WAVE_CLEAR` é emitido
+síncronamente e seta `state.over = true`. O `update()` continua no mesmo frame e pode
+re-entrar no bloco de vitória, emitindo `GAME_BOSS_SPAWN` uma segunda vez. Solução:
+guard `if (state.over) return` antes do bloco de vitória.
+
+**Resquícios visuais após stopLoop()**
+Partículas renderizadas no `gameCanvas` permanecem visíveis através da sobreposição
+semi-transparente (88% de opacidade) das telas de pausa/game over. Solução:
+`ctx.clearRect()` + `state.particles = []` imediatamente após `stopLoop()`.
+
 ---
 
 ## Roadmap
@@ -149,9 +206,10 @@ para criar mocks que serão referenciados dentro do bloco `vi.mock()`.
 - [x] Persistência local-first com SYNC RECORDS manual
 - [x] Editor de username inline no HUD
 - [x] FSM de 6 estados para navegação do jogo
-- [x] Suite de testes com 58 casos cobrindo todos os módulos principais
+- [x] Suite de testes com 102 casos cobrindo todos os módulos principais
+- [x] Sistema de áudio completo (Howler.js): músicas, SFX, playlist, crossfade, duck
+- [x] Favicon neon da nave
 
 ### Planejado
 - [ ] Leaderboard global (já há campo `username` na tabela `profiles`)
-- [ ] Trilha sonora original
 - [ ] Responsive/mobile resizer
