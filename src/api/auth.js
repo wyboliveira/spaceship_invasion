@@ -81,6 +81,24 @@ export async function updateUsername(userId, username) {
   if (error) throw error;
 }
 
+// ── Leaderboard ───────────────────────────────────────────────
+
+/**
+ * Busca o top 50 de jogadores ordenado por max_score.
+ * Retorna array vazio se Supabase indisponível.
+ */
+export async function getLeaderboard() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('username, max_score, max_wave')
+    .gt('max_score', 0)
+    .order('max_score', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data || [];
+}
+
 // ── Score ─────────────────────────────────────────────────────
 
 /**
