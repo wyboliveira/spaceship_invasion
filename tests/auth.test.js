@@ -90,21 +90,20 @@ describe('Auth API', () => {
     const currentProfile = { max_score: 50, max_wave: 5 };
     const res = await persistScore('123', 100, 10, currentProfile);
 
-    // upsert chamado com (payload, options) — dois argumentos
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
         id:         '123',
         last_score: 100,
         last_wave:  10,
-        max_score:  100, // max(50, 100)
-        max_wave:   10,  // max(5, 10)
+        max_score:  100,
+        max_wave:   10,
       }),
       { onConflict: 'id' },
     );
-    // persistScore retorna o payload local (não espera resposta do banco)
     expect(res.last_score).toBe(100);
     expect(res.max_score).toBe(100);
   });
+
 
   it('deve atualizar o username no banco via update', async () => {
     const mockEq     = vi.fn().mockResolvedValue({ error: null });

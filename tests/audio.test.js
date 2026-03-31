@@ -354,4 +354,66 @@ describe('AudioManager — EventBus (FSM)', () => {
     expect(spy).not.toHaveBeenCalled();
     AudioManager._currentTrackId = null;
   });
+
+  it('FSM_WAVE_END com boss ativo deve setar _comingFromBoss=true', () => {
+    AudioManager._currentTrackId  = 'boss';
+    AudioManager._comingFromBoss  = false;
+    vi.spyOn(AudioManager, 'stopMusic').mockImplementation(() => {});
+    EventBus.emit('FSM_WAVE_END');
+    expect(AudioManager._comingFromBoss).toBe(true);
+    AudioManager._currentTrackId = null;
+  });
+
+  it('FSM_PLAYING (from: WAVE_END, pós-boss) deve chamar playMusicRandom em vez de playMusic', () => {
+    AudioManager._comingFromBoss  = true;
+    AudioManager._currentTrackId = null;
+    const spyRandom = vi.spyOn(AudioManager, 'playMusicRandom').mockImplementation(() => {});
+    const spyMusic  = vi.spyOn(AudioManager, 'playMusic').mockImplementation(() => {});
+    EventBus.emit('FSM_PLAYING', { from: 'WAVE_END' });
+    expect(spyRandom).toHaveBeenCalledWith('gameplay');
+    expect(spyMusic).not.toHaveBeenCalled();
+    expect(AudioManager._comingFromBoss).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. playMusicRandom — aleatoriedade na playlist pós-boss
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AudioManager — playMusicRandom', () => {
+  it('deve setar um índice de playlist antes de iniciar a faixa', () => {
+    const spy = vi.spyOn(AudioManager, '_startPlaylistTrack').mockImplementation(() => {});
+    vi.spyOn(AudioManager, '_fadeOutCurrent').mockImplementation(() => {});
+
+    AudioManager.playMusicRandom('gameplay');
+    expect(spy).toHaveBeenCalledWith('gameplay');
+  });
+
+  it('deve variar o índice inicial ao ser chamado múltiplas vezes', () => {
+    vi.spyOn(AudioManager, '_startPlaylistTrack').mockImplementation(() => {});
+    vi.spyOn(AudioManager, '_fadeOutCurrent').mockImplementation(() => {});
+
+    const playlistLen = AudioManager._playlists['gameplay']?.howls.length ?? 3;
+    const indices = new Set();
+    // 20 chamadas garantem que Math.random com 3 faixas produza variação
+    for (let i = 0; i < 20; i++) {
+      AudioManager.playMusicRandom('gameplay');
+      indices.add(AudioManager._playlists['gameplay'].index);
+    }
+    // Com 3 faixas e 20 tentativas, a probabilidade de só 1 índice é (1/3)^19 ≈ 0
+    expect(indices.size).toBeGreaterThan(1);
+    expect([...indices].every(i => i >= 0 && i < playlistLen)).toBe(true);
+  });
+
+  it('deve usar playMusic normalmente quando trackId não tem playlist', () => {
+    const spy = vi.spyOn(AudioManager, 'playMusic').mockImplementation(() => {});
+    AudioManager.playMusicRandom('menu'); // 'menu' é faixa simples, sem playlist
+    expect(spy).toHaveBeenCalledWith('menu');
+  });
+
+  it('não deve chamar playMusicRandom para trackId desconhecido', () => {
+    const spy = vi.spyOn(AudioManager, '_startPlaylistTrack').mockImplementation(() => {});
+    AudioManager.playMusicRandom('inexistente');
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

@@ -34,7 +34,7 @@ import { supabase }                      from './lib/supabase.js';
 import {
   signInWithGoogle, signInWithGithub, signOut,
   getUserProfile, persistScore, updateUsername,
-  getLeaderboard,
+  getLeaderboard, pingDatabase,
 } from './api/auth.js';
 import {
   saveLocalProgress, loadLocalProgress,
@@ -82,6 +82,10 @@ setInterval(tickStars, 60);
 // ─────────────────────────────────────────────────────────────
 // Wave — inicialização
 // ─────────────────────────────────────────────────────────────
+
+/** Wave em que o jogador morreu — usada pelo botão "Tentar Novamente". */
+let _deathWave = 1;
+
 function initWave(waveNumber, livesCarryOver, weaponLevelCarryOver) {
   const cfg = getWaveConfig(waveNumber);
   updateState({
@@ -211,7 +215,7 @@ function stopLoop() {
 function _saveLocalScore(context) {
   if (!state.session || state.wave <= 0) return;
   const updated = saveLocalProgress(state.session.user.id, state.score, state.wave);
-  updateState({ userProfile: updated, syncError: null });
+  updateState({ userProfile: { ...updated, role: state.userProfile?.role || updated.role }, syncError: null });
   console.log(`[LocalStore] Score salvo localmente (${context}): score=${state.score} wave=${state.wave}`);
 }
 
@@ -236,6 +240,7 @@ const GameUI = {
    * Transição: PLAYING → GAME_OVER (score salvo localmente, sem espera de rede)
    */
   triggerGameOver() {
+    _deathWave = state.wave;
     updateState({ over: true, particles: [] });
     stopLoop();
     ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
@@ -403,7 +408,7 @@ EventBus.on('FSM_GAME_OVER', () => {
 
     restartBtn.onclick = () => {
       window.removeEventListener('keydown', navHandler);
-      Game.start();
+      Game.retry();
     };
     menuBtn.onclick = () => {
       window.removeEventListener('keydown', navHandler);
@@ -524,7 +529,7 @@ function _renderMenu() {
           // Zera o localStorage local e re-renderiza com zeros imediatamente.
           // O banco será zerado quando o usuário clicar em SYNC RECORDS.
           const cleared = clearLocalProgress(state.session.user.id);
-          updateState({ userProfile: cleared, syncError: null });
+          updateState({ userProfile: { ...cleared, role: state.userProfile?.role || cleared.role }, syncError: null });
           _renderMenu();
         },
       );
@@ -543,14 +548,12 @@ function _renderMenu() {
       if (statusEl) { statusEl.textContent = 'CONECTANDO AO BANCO...'; statusEl.style.color = '#aaa'; }
 
       try {
-        await persistScore(
-          userId,
-          localData?.last_score || 0,
-          localData?.last_wave  || 0,
-          { max_score: localData?.max_score || 0, max_wave: localData?.max_wave || 0 },
+        await _lbWithRetry(
+          () => persistScore(userId, localData?.last_score || 0, localData?.last_wave || 0, localData),
+          12000,
         );
         const updated = markSynced();
-        updateState({ userProfile: updated, syncError: null });
+        updateState({ userProfile: { ...updated, role: state.userProfile?.role || updated.role }, syncError: null });
         _renderMenu(); // re-renderiza com novo timestamp
       } catch (err) {
         console.error('[Sync] Falha no SYNC RECORDS:', err.message);
@@ -576,14 +579,29 @@ let _lbPage = 0;
 
 const DOTS = '. '.repeat(60); // overflow hidden faz o clip automaticamente
 
-/** Rejeita a promise se não resolver dentro de `ms` milissegundos. */
-function _lbWithTimeout(promise, ms) {
-  return Promise.race([
-    promise,
+/**
+ * Executa uma factory de promise com timeout.
+ * Se timeout ocorrer, envia um ping para acordar o banco e tenta 1 vez.
+ * @param {() => Promise} fn  — factory que cria a promise (chamada a cada tentativa)
+ * @param {number} ms         — timeout por tentativa (ms)
+ */
+async function _lbWithRetry(fn, ms) {
+  const _once = (factory) => Promise.race([
+    factory(),
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error(`Timeout após ${ms}ms — banco pode estar acordando, tente novamente`)), ms)
     ),
   ]);
+
+  try {
+    return await _once(fn);
+  } catch (err) {
+    if (!err.message.startsWith('Timeout')) throw err;
+    // Ping silencioso para acordar o banco, depois tenta de novo
+    console.warn('[DB] Timeout — enviando ping e tentando novamente...');
+    await pingDatabase().catch(() => {});
+    return await _once(fn);
+  }
 }
 
 const Leaderboard = {
@@ -609,7 +627,7 @@ const Leaderboard = {
     statusEl.style.color = '#555';
 
     try {
-      _lbData = await _lbWithTimeout(getLeaderboard(), 12000);
+      _lbData = await _lbWithRetry(() => getLeaderboard(), 12000);
       statusEl.textContent = '';
       this._render();
     } catch (err) {
@@ -678,13 +696,8 @@ const Leaderboard = {
     statusEl.style.color = '#aaa';
 
     try {
-      await _lbWithTimeout(
-        persistScore(
-          userId,
-          localData?.last_score || 0,
-          localData?.last_wave  || 0,
-          { max_score: localData?.max_score || 0, max_wave: localData?.max_wave || 0 },
-        ),
+      await _lbWithRetry(
+        () => persistScore(userId, localData?.last_score || 0, localData?.last_wave || 0, localData),
         12000,
       );
       markSynced();
@@ -727,11 +740,11 @@ supabase?.auth.onAuthStateChange(async (event, session) => {
     // Tenta usar dados locais primeiro (sem chamada de rede)
     const localData = loadLocalProgress(session.user.id);
     if (localData) {
-      updateState({ userProfile: localData, syncError: null });
+      updateState({ userProfile: { ...localData, role: state.userProfile?.role || localData.role }, syncError: null });
     }
 
     // Role é permissão de servidor — sempre busca do banco para garantir valor atual.
-    // Score/wave continuam vindo do cache local se disponível.
+    // Chamada simples sem retry para não saturar o pool de conexões em eventos de auth.
     const profile = await getUserProfile(session.user.id).catch(err => {
       console.warn('[Auth] Falha ao carregar perfil do banco:', err.message);
       return null;
@@ -747,6 +760,8 @@ supabase?.auth.onAuthStateChange(async (event, session) => {
       // Atualiza apenas o role no estado (role sempre vem do banco, não do cache)
       updateState({ userProfile: { ...state.userProfile, role: profile.role || 'player' }, syncError: null });
     }
+    // Re-renderiza o menu após o role ser resolvido (pode ter chegado de forma assíncrona)
+    if (GameFSM.state === 'MENU') _renderMenu();
   } else {
     updateState({ userProfile: null, syncError: null });
   }
@@ -773,6 +788,17 @@ const Game = {
     hideOverlay();
     document.getElementById('pauseIndicator').classList.add('hidden');
     initWave(1);
+    updateHUD();
+    GameFSM.transition('PLAYING');
+    startLoop();
+  },
+
+  /** Reinicia a partir da wave em que o jogador morreu (score zerado, vidas cheias). */
+  retry() {
+    updateState({ score: 0, paused: false });
+    hideOverlay();
+    document.getElementById('pauseIndicator').classList.add('hidden');
+    initWave(_deathWave);
     updateHUD();
     GameFSM.transition('PLAYING');
     startLoop();
@@ -869,7 +895,7 @@ initUsernameEdit(async (newUsername) => {
 
   // Atualiza local imediatamente
   const updated = updateLocalUsername(userId, newUsername);
-  if (updated) updateState({ userProfile: updated });
+  if (updated) updateState({ userProfile: { ...updated, role: state.userProfile?.role || updated.role } });
   updateHUD();
 
   // Envia ao Supabase em background (sem travar a UI)

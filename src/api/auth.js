@@ -81,6 +81,25 @@ export async function updateUsername(userId, username) {
   if (error) throw error;
 }
 
+// ── Ping / warm-up ────────────────────────────────────────────
+
+/**
+ * Acorda o banco com uma query leve (sem retornar dados reais).
+ * Chame isso silenciosamente antes de operações críticas para
+ * reduzir o cold-start do Supabase free tier.
+ * Nunca lança — é fire-and-forget seguro.
+ */
+export async function pingDatabase() {
+  if (!supabase) return false;
+  try {
+    await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
 // ── Leaderboard ───────────────────────────────────────────────
 
 /**
@@ -125,6 +144,7 @@ export async function persistScore(userId, score, wave, currentProfile = {}) {
     max_score:  newMaxScore,
     max_wave:   newMaxWave,
     updated_at: new Date().toISOString(),
+    ...(safeProfile.username ? { username: safeProfile.username } : {}),
   };
 
   const { error } = await supabase

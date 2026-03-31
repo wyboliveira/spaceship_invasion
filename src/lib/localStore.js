@@ -28,6 +28,7 @@ export function saveLocalProgress(userId, score, wave) {
   const data = {
     userId,
     username:       existing.username      || null,
+    role:           existing.role          || 'player',
     max_score:      Math.max(existing.max_score  || 0, score),
     max_wave:       Math.max(existing.max_wave   || 0, wave),
     last_score:     score,
@@ -88,8 +89,9 @@ export function markSynced() {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    data.lastSyncedAt = new Date().toISOString();
-    data.pendingSync  = false;
+    data.lastSyncedAt        = new Date().toISOString();
+    data.pendingSync         = false;
+    data.pendingUsernameSync = false;
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
     return data;
   } catch {
@@ -107,6 +109,7 @@ export function clearLocalProgress(userId) {
   const data = {
     userId,
     username:       existing.username || null,
+    role:           existing.role     || 'player',
     max_score:      0,
     max_wave:       0,
     last_score:     0,
@@ -128,8 +131,9 @@ export function updateLocalUsername(userId, username) {
     const raw = localStorage.getItem(STORE_KEY);
     const data = raw ? JSON.parse(raw) : { userId };
     if (data.userId !== userId) return null;
-    data.username       = username;
-    data.localUpdatedAt = new Date().toISOString();
+    data.username            = username;
+    data.pendingUsernameSync = true;
+    data.localUpdatedAt      = new Date().toISOString();
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
     return data;
   } catch {

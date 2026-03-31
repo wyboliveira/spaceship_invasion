@@ -36,6 +36,8 @@ class AudioManagerClass {
     this._musicMuted     = false;
     this._muted          = false;
     this._masterVolume   = 1.0;
+    /** @type {boolean} true quando a música do boss foi interrompida ao fim da wave */
+    this._comingFromBoss = false;
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -82,6 +84,25 @@ class AudioManagerClass {
       if (!next) return;
       this._playHowl(next, cfg);
     }
+  }
+
+  /**
+   * Inicia playlist em uma faixa aleatória (evita repetir sempre a primeira).
+   * Usado após combate com boss para variar a trilha de gameplay.
+   * @param {string} trackId — chave em audioConfig.music (deve ter playlist)
+   */
+  playMusicRandom(trackId) {
+    const cfg = audioConfig.music[trackId];
+    if (!cfg?.playlist) return this.playMusic(trackId);
+
+    const pl = this._playlists[trackId];
+    if (!pl || pl.howls.length === 0) return;
+
+    this._fadeOutCurrent(cfg.fadeMs);
+    this._currentTrackId = trackId;
+    this._isDucked       = false;
+    pl.index = Math.floor(Math.random() * pl.howls.length);
+    this._startPlaylistTrack(trackId);
   }
 
   /**
@@ -304,12 +325,22 @@ class AudioManagerClass {
         return;
       }
 
+      // Pós-boss: sorteia uma faixa aleatória para não repetir sempre a primeira
+      if (from === 'WAVE_END' && this._comingFromBoss) {
+        this._comingFromBoss = false;
+        this.playMusicRandom('gameplay');
+        return;
+      }
+
       this.playMusic('gameplay');
     });
 
     EventBus.on('FSM_PAUSED',   () => this._duck());
     EventBus.on('FSM_WAVE_END', () => {
-      if (this._currentTrackId === 'boss') this.stopMusic(400);
+      if (this._currentTrackId === 'boss') {
+        this._comingFromBoss = true;
+        this.stopMusic(400);
+      }
     });
 
     EventBus.on('FSM_GAME_OVER', () => {

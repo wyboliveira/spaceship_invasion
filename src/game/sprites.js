@@ -212,11 +212,25 @@ export function drawWeaponIndicator(ctx, level, W, H) {
 }
 
 // ── Boss ───────────────────────────────────────────────────────
+
+/** Dispatcher: seleciona a função de desenho correta para cada wave de boss. */
+const _BOSS_DRAW = {
+  10:  _drawBoss10,
+  20:  _drawBoss20,
+  30:  _drawBoss30,
+  40:  _drawBoss40,
+  50:  _drawBoss50,
+  60:  _drawBoss60,
+  70:  _drawBoss70,
+  80:  _drawBoss80,
+  90:  _drawBoss90,
+  100: _drawBoss100,
+};
+
 export function drawBoss(ctx, boss, frame, wave) {
   const { x, y } = boss;
   const W = boss.w || 119;
   const H = boss.h || 102;
-  const pulse = (Math.sin(frame * 0.05) + 1) / 2;
 
   // Flash de hit (branco ao ser atingido)
   if (boss.flashTimer > 0) {
@@ -230,81 +244,428 @@ export function drawBoss(ctx, boss, frame, wave) {
     return;
   }
 
-  // Glow pulsante externo
-  const glowColor = boss.neon ? '#00ffcc' : '#ff4400';
-  ctx.shadowColor = glowColor;
-  ctx.shadowBlur  = 20 + pulse * 20;
-
-  // Corpo principal do boss (pixel-art escalado ~3.5x)
-  ctx.fillStyle = boss.neon ? '#00ccaa' : '#cc2200';
-  ctx.fillRect(x + 10, y,        W - 20, H - 20);
-  ctx.fillRect(x,      y + 15,   W,      H - 40);
-  ctx.fillRect(x + 20, y + H - 25, W - 40, 25);
-
-  ctx.fillStyle = boss.neon ? '#00ffee' : '#ff5500';
-  ctx.fillRect(x + 20, y + 10,   W - 40, H - 30);
-  ctx.fillRect(x + 40, y,        W - 80, 20);
-
-  // Olhos do boss
-  ctx.fillStyle   = '#ffffff';
-  ctx.shadowBlur  = 15;
-  ctx.shadowColor = '#ffffff';
-  ctx.fillRect(x + 22, y + 25, 16, 14);
-  ctx.fillRect(x + W - 38, y + 25, 16, 14);
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(x + 25, y + 28, 10, 8);
-  ctx.fillRect(x + W - 35, y + 28, 10, 8);
-
-  // Detalhe central (boca/núcleo)
-  ctx.fillStyle   = boss.neon ? '#00ffcc' : '#ffaa00';
-  ctx.shadowColor = boss.neon ? '#00ffcc' : '#ffaa00';
-  ctx.shadowBlur  = 10 + pulse * 10;
-  ctx.fillRect(x + W/2 - 15, y + H - 30, 30, 8);
-  ctx.fillRect(x + W/2 - 8,  y + H - 22, 16, 5);
-
-  // Efeito neon especial para wave 100
-  if (boss.neon) {
-    ctx.strokeStyle = '#00ffcc';
-    ctx.lineWidth   = 2;
-    ctx.shadowColor = '#00ffcc';
-    ctx.shadowBlur  = 25 + pulse * 15;
-    ctx.strokeRect(x + 4, y + 4, W - 8, H - 8);
-    ctx.strokeRect(x + 12, y + 12, W - 24, H - 24);
-  }
-
+  const pulse = (Math.sin(frame * 0.05) + 1) / 2;
+  const drawFn = _BOSS_DRAW[wave] ?? _drawBoss10;
+  drawFn(ctx, x, y, W, H, pulse);
   ctx.shadowBlur = 0;
 
-  // Escudo
+  // Escudo (painéis flutuantes esverdeados)
   if (boss.shield > 0) drawBossShield(ctx, boss, frame);
 
   // Barra de HP
-  const barW = W;
-  const barH = 6;
-  const barY = y - 14;
-  const hpRatio = Math.max(0, boss.hp / boss.maxHp);
-  ctx.fillStyle = '#333';
-  ctx.fillRect(x, barY, barW, barH);
-  const hpCol = hpRatio > 0.5 ? '#00ff88' : hpRatio > 0.25 ? '#ffaa00' : '#ff3355';
-  ctx.fillStyle   = hpCol;
+  const barY     = y - 14;
+  const hpRatio  = Math.max(0, boss.hp / boss.maxHp);
+  ctx.fillStyle  = '#333';
+  ctx.fillRect(x, barY, W, 6);
+  const hpCol    = hpRatio > 0.5 ? '#00ff88' : hpRatio > 0.25 ? '#ffaa00' : '#ff3355';
+  ctx.fillStyle  = hpCol;
   ctx.shadowColor = hpCol;
   ctx.shadowBlur  = 6;
-  ctx.fillRect(x, barY, barW * hpRatio, barH);
+  ctx.fillRect(x, barY, W * hpRatio, 6);
   ctx.shadowBlur = 0;
 }
 
+// ── Wave 10 — Alien Laranja ──────────────────────────────────
+function _drawBoss10(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 18 + pulse * 18;
+  ctx.fillStyle = '#cc2200';
+  ctx.fillRect(x + 10, y + 5,    W - 20, H - 25);
+  ctx.fillRect(x,      y + 18,   W,      H - 48);
+  ctx.fillRect(x + 22, y + H-22, W - 44, 22);
+  ctx.fillStyle = '#ff5500';
+  ctx.fillRect(x + 20, y + 12,   W - 40, H - 38);
+  ctx.fillRect(x + 42, y,        W - 84, 16);
+  // Olhos raivosos
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
+  ctx.fillRect(x + 20, y + 27, 18, 13);
+  ctx.fillRect(x + W-38, y + 27, 18, 13);
+  ctx.fillStyle = '#ff3300';
+  ctx.fillRect(x + 18, y + 24, 22, 3);
+  ctx.fillRect(x + W-40, y + 24, 22, 3);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 23, y + 29, 11, 9);
+  ctx.fillRect(x + W-34, y + 29, 11, 9);
+  // Boca
+  ctx.fillStyle = '#ffaa00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 8 + pulse * 8;
+  ctx.fillRect(x + W/2-16, y + H-26, 32, 6);
+  ctx.fillRect(x + W/2-10, y + H-20, 20, 5);
+}
+
+// ── Wave 20 — Alien Laranja com Chifre ──────────────────────
+function _drawBoss20(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 18 + pulse * 18;
+  // Chifre central
+  ctx.fillStyle = '#ff6600';
+  ctx.fillRect(x + W/2 - 7, y - 22, 14, 24);
+  ctx.fillRect(x + W/2 - 4, y - 32, 8,  12);
+  ctx.fillRect(x + W/2 - 2, y - 40, 4,  10);
+  // Corpo (igual ao boss 10)
+  ctx.fillStyle = '#cc2200';
+  ctx.fillRect(x + 10, y + 5,    W - 20, H - 25);
+  ctx.fillRect(x,      y + 18,   W,      H - 48);
+  ctx.fillRect(x + 22, y + H-22, W - 44, 22);
+  ctx.fillStyle = '#ff5500';
+  ctx.fillRect(x + 20, y + 12,   W - 40, H - 38);
+  ctx.fillRect(x + 42, y,        W - 84, 16);
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
+  ctx.fillRect(x + 20, y + 27, 18, 13);
+  ctx.fillRect(x + W-38, y + 27, 18, 13);
+  ctx.fillStyle = '#ff3300';
+  ctx.fillRect(x + 18, y + 24, 22, 3);
+  ctx.fillRect(x + W-40, y + 24, 22, 3);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 23, y + 29, 11, 9);
+  ctx.fillRect(x + W-34, y + 29, 11, 9);
+  ctx.fillStyle = '#ffaa00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 8 + pulse * 8;
+  ctx.fillRect(x + W/2-16, y + H-26, 32, 6);
+  ctx.fillRect(x + W/2-10, y + H-20, 20, 5);
+}
+
+// ── Wave 30 — Alien Laranja com Chifre e Pinças ─────────────
+function _drawBoss30(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 18 + pulse * 18;
+  // Chifre
+  ctx.fillStyle = '#ff6600';
+  ctx.fillRect(x + W/2 - 7, y - 22, 14, 24);
+  ctx.fillRect(x + W/2 - 4, y - 32, 8,  12);
+  ctx.fillRect(x + W/2 - 2, y - 40, 4,  10);
+  // Pinças laterais
+  ctx.fillStyle = '#cc3300';
+  ctx.fillRect(x - 18, y + 28, 20, 12);
+  ctx.fillRect(x - 24, y + 22, 10, 9);
+  ctx.fillRect(x - 24, y + 36, 10, 9);
+  ctx.fillRect(x + W - 2, y + 28, 20, 12);
+  ctx.fillRect(x + W + 14, y + 22, 10, 9);
+  ctx.fillRect(x + W + 14, y + 36, 10, 9);
+  // Corpo
+  ctx.fillStyle = '#cc2200';
+  ctx.fillRect(x + 10, y + 5,    W - 20, H - 25);
+  ctx.fillRect(x,      y + 18,   W,      H - 48);
+  ctx.fillRect(x + 22, y + H-22, W - 44, 22);
+  ctx.fillStyle = '#ff5500';
+  ctx.fillRect(x + 20, y + 12,   W - 40, H - 38);
+  ctx.fillRect(x + 42, y,        W - 84, 16);
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
+  ctx.fillRect(x + 20, y + 27, 18, 13);
+  ctx.fillRect(x + W-38, y + 27, 18, 13);
+  ctx.fillStyle = '#ff3300';
+  ctx.fillRect(x + 18, y + 24, 22, 3);
+  ctx.fillRect(x + W-40, y + 24, 22, 3);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 23, y + 29, 11, 9);
+  ctx.fillRect(x + W-34, y + 29, 11, 9);
+  ctx.fillStyle = '#ffaa00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 8 + pulse * 8;
+  ctx.fillRect(x + W/2-16, y + H-26, 32, 6);
+  ctx.fillRect(x + W/2-10, y + H-20, 20, 5);
+}
+
+// ── Wave 40 — Caranguejo Azul ────────────────────────────────
+function _drawBoss40(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#2244ff'; ctx.shadowBlur = 18 + pulse * 18;
+  // Garras
+  ctx.fillStyle = '#0a1a99';
+  ctx.fillRect(x - 22, y + 22, 24, 14);
+  ctx.fillRect(x - 28, y + 17, 12, 10);
+  ctx.fillRect(x - 28, y + 32, 12, 10);
+  ctx.fillRect(x + W - 2, y + 22, 24, 14);
+  ctx.fillRect(x + W + 16, y + 17, 12, 10);
+  ctx.fillRect(x + W + 16, y + 32, 12, 10);
+  // Carapaça
+  ctx.fillStyle = '#0a1a99';
+  ctx.fillRect(x + 15, y + 18, W - 30, H - 35);
+  ctx.fillRect(x + 30, y + 8,  W - 60, 14);
+  ctx.fillRect(x + 5,  y + 30, W - 10, H - 55);
+  ctx.fillStyle = '#2244cc';
+  ctx.fillRect(x + 25, y + 16, W - 50, 22);
+  ctx.fillStyle = '#3355ff';
+  ctx.fillRect(x + 34, y + 20, W - 68, 12);
+  // Pedúnculos oculares
+  ctx.fillStyle = '#0a1a99';
+  ctx.fillRect(x + 36, y + 4,  7, 16);
+  ctx.fillRect(x + W-43, y + 4, 7, 16);
+  ctx.fillStyle = '#ff2222'; ctx.shadowColor = '#ff2222'; ctx.shadowBlur = 10;
+  ctx.fillRect(x + 32, y,     14, 8);
+  ctx.fillRect(x + W-46, y,   14, 8);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 35, y + 1, 6, 6);
+  ctx.fillRect(x + W-41, y + 1, 6, 6);
+}
+
+// ── Wave 50 — Caranguejo Amarelo ─────────────────────────────
+function _drawBoss50(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 18 + pulse * 18;
+  ctx.fillStyle = '#996600';
+  ctx.fillRect(x - 22, y + 22, 24, 14);
+  ctx.fillRect(x - 28, y + 17, 12, 10);
+  ctx.fillRect(x - 28, y + 32, 12, 10);
+  ctx.fillRect(x + W - 2, y + 22, 24, 14);
+  ctx.fillRect(x + W + 16, y + 17, 12, 10);
+  ctx.fillRect(x + W + 16, y + 32, 12, 10);
+  ctx.fillStyle = '#996600';
+  ctx.fillRect(x + 15, y + 18, W - 30, H - 35);
+  ctx.fillRect(x + 30, y + 8,  W - 60, 14);
+  ctx.fillRect(x + 5,  y + 30, W - 10, H - 55);
+  ctx.fillStyle = '#ccaa00';
+  ctx.fillRect(x + 25, y + 16, W - 50, 22);
+  ctx.fillStyle = '#ffcc22';
+  ctx.fillRect(x + 34, y + 20, W - 68, 12);
+  ctx.fillStyle = '#996600';
+  ctx.fillRect(x + 36, y + 4,  7, 16);
+  ctx.fillRect(x + W-43, y + 4, 7, 16);
+  ctx.fillStyle = '#ff2222'; ctx.shadowColor = '#ff2222'; ctx.shadowBlur = 10;
+  ctx.fillRect(x + 32, y,     14, 8);
+  ctx.fillRect(x + W-46, y,   14, 8);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 35, y + 1, 6, 6);
+  ctx.fillRect(x + W-41, y + 1, 6, 6);
+}
+
+// ── Wave 60 — Caranguejo Verde ───────────────────────────────
+function _drawBoss60(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#33cc44'; ctx.shadowBlur = 18 + pulse * 18;
+  ctx.fillStyle = '#115500';
+  ctx.fillRect(x - 22, y + 22, 24, 14);
+  ctx.fillRect(x - 28, y + 17, 12, 10);
+  ctx.fillRect(x - 28, y + 32, 12, 10);
+  ctx.fillRect(x + W - 2, y + 22, 24, 14);
+  ctx.fillRect(x + W + 16, y + 17, 12, 10);
+  ctx.fillRect(x + W + 16, y + 32, 12, 10);
+  ctx.fillStyle = '#115500';
+  ctx.fillRect(x + 15, y + 18, W - 30, H - 35);
+  ctx.fillRect(x + 30, y + 8,  W - 60, 14);
+  ctx.fillRect(x + 5,  y + 30, W - 10, H - 55);
+  ctx.fillStyle = '#1a7722';
+  ctx.fillRect(x + 25, y + 16, W - 50, 22);
+  ctx.fillStyle = '#33cc44';
+  ctx.fillRect(x + 34, y + 20, W - 68, 12);
+  ctx.fillStyle = '#115500';
+  ctx.fillRect(x + 36, y + 4,  7, 16);
+  ctx.fillRect(x + W-43, y + 4, 7, 16);
+  ctx.fillStyle = '#ff2222'; ctx.shadowColor = '#ff2222'; ctx.shadowBlur = 10;
+  ctx.fillRect(x + 32, y,     14, 8);
+  ctx.fillRect(x + W-46, y,   14, 8);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 35, y + 1, 6, 6);
+  ctx.fillRect(x + W-41, y + 1, 6, 6);
+}
+
+// ── Wave 70 — Caranguejo Verde com Espinhos e Pinças ─────────
+function _drawBoss70(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#33cc44'; ctx.shadowBlur = 20 + pulse * 20;
+  // Espinhos no topo
+  ctx.fillStyle = '#228833';
+  ctx.fillRect(x + 33, y - 10, 10, 14);
+  ctx.fillRect(x + W/2 - 6, y - 18, 12, 22);
+  ctx.fillRect(x + W - 43, y - 10, 10, 14);
+  ctx.fillStyle = '#66ff88'; ctx.shadowColor = '#66ff88'; ctx.shadowBlur = 8;
+  ctx.fillRect(x + 36, y - 12, 4, 5);
+  ctx.fillRect(x + W/2 - 3, y - 21, 6, 5);
+  ctx.fillRect(x + W - 40, y - 12, 4, 5);
+  ctx.shadowColor = '#33cc44'; ctx.shadowBlur = 20 + pulse * 20;
+  // Garras maiores
+  ctx.fillStyle = '#115500';
+  ctx.fillRect(x - 28, y + 18, 30, 16);
+  ctx.fillRect(x - 36, y + 12, 14, 12);
+  ctx.fillRect(x - 36, y + 30, 14, 12);
+  ctx.fillRect(x + W - 2, y + 18, 30, 16);
+  ctx.fillRect(x + W + 22, y + 12, 14, 12);
+  ctx.fillRect(x + W + 22, y + 30, 14, 12);
+  // Carapaça
+  ctx.fillStyle = '#115500';
+  ctx.fillRect(x + 15, y + 18, W - 30, H - 35);
+  ctx.fillRect(x + 30, y + 8,  W - 60, 14);
+  ctx.fillRect(x + 5,  y + 30, W - 10, H - 55);
+  ctx.fillStyle = '#1a7722';
+  ctx.fillRect(x + 25, y + 16, W - 50, 22);
+  ctx.fillStyle = '#33cc44';
+  ctx.fillRect(x + 34, y + 20, W - 68, 12);
+  ctx.fillStyle = '#115500';
+  ctx.fillRect(x + 36, y + 4,  7, 16);
+  ctx.fillRect(x + W-43, y + 4, 7, 16);
+  ctx.fillStyle = '#ff2222'; ctx.shadowColor = '#ff2222'; ctx.shadowBlur = 10;
+  ctx.fillRect(x + 32, y,     14, 8);
+  ctx.fillRect(x + W-46, y,   14, 8);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 35, y + 1, 6, 6);
+  ctx.fillRect(x + W-41, y + 1, 6, 6);
+}
+
+// ── Wave 80 — Polvo Alaranjado ───────────────────────────────
+function _drawBoss80(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#ff6622'; ctx.shadowBlur = 18 + pulse * 18;
+  // Tentáculos (4 pendurados abaixo)
+  const tentY = y + H - 32;
+  const tentXs = [x + 12, x + 34, x + 57, x + 79];
+  for (const tx of tentXs) {
+    ctx.fillStyle = '#aa3300';
+    ctx.fillRect(tx, tentY, 14, 30);
+    ctx.fillStyle = '#cc5522';
+    ctx.fillRect(tx + 3, tentY + 4, 7, 20);
+    ctx.fillStyle = '#aa3300';
+    ctx.fillRect(tx - 3, tentY + 26, 20, 10);
+  }
+  // Domo da cabeça
+  ctx.fillStyle = '#aa3300';
+  ctx.fillRect(x + 18, y + 2,  W - 36, H - 38);
+  ctx.fillRect(x + 30, y - 6,  W - 60, 14);
+  ctx.fillRect(x + 10, y + 18, W - 20, H - 55);
+  ctx.fillStyle = '#cc5522';
+  ctx.fillRect(x + 28, y + 6,  W - 56, H - 52);
+  ctx.fillStyle = '#ff8844';
+  ctx.fillRect(x + 38, y + 10, W - 76, H - 68);
+  // Olhos raivosos
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 14;
+  ctx.fillRect(x + 20, y + 22, 24, 16);
+  ctx.fillRect(x + W-44, y + 22, 24, 16);
+  ctx.fillStyle = '#ff3300';
+  ctx.fillRect(x + 18, y + 19, 28, 4);
+  ctx.fillRect(x + W-46, y + 19, 28, 4);
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(x + 24, y + 26, 15, 10);
+  ctx.fillRect(x + W-39, y + 26, 15, 10);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 28, y + 28, 7, 6);
+  ctx.fillRect(x + W-35, y + 28, 7, 6);
+}
+
+// ── Wave 90 — Lula Cinzenta ──────────────────────────────────
+function _drawBoss90(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#aabbcc'; ctx.shadowBlur = 18 + pulse * 18;
+  // Tentáculos (6)
+  const sqY = y + H - 22;
+  const sqXs = [x + 8, x + 24, x + 40, x + 56, x + 72, x + 88];
+  for (const tx of sqXs) {
+    ctx.fillStyle = '#445566';
+    ctx.fillRect(tx, sqY, 9, 28);
+    ctx.fillRect(tx - 2, sqY + 24, 13, 8);
+    ctx.fillStyle = '#7788aa';
+    ctx.fillRect(tx + 2, sqY + 2, 4, 18);
+  }
+  // Nadadeiras laterais
+  ctx.fillStyle = '#445566';
+  ctx.fillRect(x + 4,   y + 18, 18, 32);
+  ctx.fillRect(x + W-22, y + 18, 18, 32);
+  ctx.fillStyle = '#7788aa';
+  ctx.fillRect(x + 7,   y + 22, 10, 24);
+  ctx.fillRect(x + W-17, y + 22, 10, 24);
+  // Manto/cabeça alongada
+  ctx.fillStyle = '#445566';
+  ctx.fillRect(x + 22, y + 2,  W - 44, H - 28);
+  ctx.fillRect(x + 35, y - 12, W - 70, 18);
+  ctx.fillRect(x + 12, y + 28, W - 24, H - 62);
+  ctx.fillStyle = '#7788aa';
+  ctx.fillRect(x + 32, y + 8,  W - 64, H - 50);
+  ctx.fillStyle = '#aabbcc';
+  ctx.fillRect(x + 42, y + 12, W - 84, H - 66);
+  // Olhos raivosos
+  ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
+  ctx.fillRect(x + 25, y + 30, 22, 15);
+  ctx.fillRect(x + W-47, y + 30, 22, 15);
+  ctx.fillStyle = '#cc0000';
+  ctx.fillRect(x + 23, y + 26, 28, 5);
+  ctx.fillRect(x + W-51, y + 26, 28, 5);
+  ctx.fillStyle = '#cc0000';
+  ctx.fillRect(x + 28, y + 33, 15, 9);
+  ctx.fillRect(x + W-43, y + 33, 15, 9);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 32, y + 35, 6, 5);
+  ctx.fillRect(x + W-38, y + 35, 6, 5);
+}
+
+// ── Wave 100 — Morcego (Boss Final) ─────────────────────────
+function _drawBoss100(ctx, x, y, W, H, pulse) {
+  ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 25 + pulse * 20;
+  // Asas (estendem-se além do hitbox)
+  ctx.fillStyle = '#2a0808';
+  ctx.fillRect(x - 35, y + 8,  40, 8);
+  ctx.fillRect(x - 35, y + 8,  8,  42);
+  ctx.fillRect(x - 30, y + 46, 35, 8);
+  ctx.fillRect(x - 5,  y + 14, 20, 36);
+  ctx.fillRect(x + W - 5, y + 8,  40, 8);
+  ctx.fillRect(x + W + 27, y + 8,  8,  42);
+  ctx.fillRect(x + W - 5, y + 46, 35, 8);
+  ctx.fillRect(x + W - 15, y + 14, 20, 36);
+  // Destaque vermelho nas asas
+  ctx.fillStyle = '#550000';
+  ctx.fillRect(x - 28, y + 12, 24, 5);
+  ctx.fillRect(x + W + 4, y + 12, 24, 5);
+  // Orelhas pontiagudas
+  ctx.fillStyle = '#220000';
+  ctx.fillRect(x + 28, y - 16, 14, 22);
+  ctx.fillRect(x + W-42, y - 16, 14, 22);
+  ctx.fillStyle = '#cc1100';
+  ctx.fillRect(x + 31, y - 13, 7, 16);
+  ctx.fillRect(x + W-38, y - 13, 7, 16);
+  // Corpo central
+  ctx.fillStyle = '#220000';
+  ctx.fillRect(x + 22, y + 4,  W - 44, H - 18);
+  ctx.fillRect(x + 36, y,      W - 72, 10);
+  ctx.fillStyle = '#440000';
+  ctx.fillRect(x + 32, y + 10, W - 64, H - 35);
+  ctx.fillStyle = '#660000';
+  ctx.fillRect(x + 42, y + 16, W - 84, H - 50);
+  // Marcações laranja/vermelhas no peito
+  ctx.fillStyle = '#ff4400'; ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 8 + pulse * 6;
+  ctx.fillRect(x + W/2-22, y + H-38, 44, 5);
+  ctx.fillRect(x + W/2-16, y + H-31, 32, 4);
+  ctx.fillRect(x + W/2-10, y + H-25, 20, 4);
+  // Olhos amarelos ferozes
+  ctx.fillStyle = '#ffcc00'; ctx.shadowColor = '#ffcc00'; ctx.shadowBlur = 15 + pulse * 10;
+  ctx.fillRect(x + 30, y + 20, 22, 14);
+  ctx.fillRect(x + W-52, y + 20, 22, 14);
+  ctx.fillStyle = '#ff7700';
+  ctx.fillRect(x + 28, y + 17, 26, 4);
+  ctx.fillRect(x + W-54, y + 17, 26, 4);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x + 34, y + 22, 12, 10);
+  ctx.fillRect(x + W-46, y + 22, 12, 10);
+  // Borda neon para boss final
+  ctx.strokeStyle = '#ff4400';
+  ctx.lineWidth   = 2;
+  ctx.shadowColor = '#ff4400';
+  ctx.shadowBlur  = 20 + pulse * 15;
+  ctx.strokeRect(x + 18, y + 2, W - 36, H - 16);
+}
+
+// ── Escudo — 3 painéis flutuantes esverdeados ────────────────
 function drawBossShield(ctx, boss, frame) {
   const pulse = (Math.sin(frame * 0.08) + 1) / 2;
-  const shieldAlpha = 0.4 + pulse * 0.4;
-  ctx.globalAlpha = shieldAlpha;
-  ctx.strokeStyle = '#00ffff';
-  ctx.shadowColor = '#00ffff';
-  ctx.shadowBlur  = 15 + pulse * 10;
-  ctx.lineWidth   = 3;
-  const sx = boss.x - 8;
-  const sy = boss.y - 8;
-  const sw = (boss.w || 119) + 16;
-  const sh = (boss.h || 102) + 16;
-  ctx.strokeRect(sx, sy, sw, sh);
+  const float = Math.sin(frame * 0.05) * 5;
+  const alpha = 0.55 + pulse * 0.35;
+  const W  = boss.w || 119;
+  const H  = boss.h || 102;
+  const cx = boss.x + W / 2;
+  const cy = boss.y + H / 2;
+
+  ctx.shadowColor = '#33ff88';
+  ctx.shadowBlur  = 14 + pulse * 10;
+
+  // Painel superior (horizontal, centralizado)
+  const topW = Math.round(W * 0.52);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#00cc66';
+  ctx.fillRect(cx - topW / 2, boss.y - 20 + float, topW, 7);
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.fillStyle = '#88ffbb';
+  ctx.fillRect(cx - topW / 2 + 2, boss.y - 19 + float, topW - 4, 2);
+
+  // Painel esquerdo (vertical)
+  const sideH = Math.round(H * 0.45);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#00cc66';
+  ctx.fillRect(boss.x - 20 - float * 0.5, cy - sideH / 2, 7, sideH);
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.fillStyle = '#88ffbb';
+  ctx.fillRect(boss.x - 19 - float * 0.5, cy - sideH / 2 + 2, 2, sideH - 4);
+
+  // Painel direito (vertical)
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#00cc66';
+  ctx.fillRect(boss.x + W + 13 + float * 0.5, cy - sideH / 2, 7, sideH);
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.fillStyle = '#88ffbb';
+  ctx.fillRect(boss.x + W + 14 + float * 0.5, cy - sideH / 2 + 2, 2, sideH - 4);
+
   ctx.globalAlpha = 1;
   ctx.shadowBlur  = 0;
 }

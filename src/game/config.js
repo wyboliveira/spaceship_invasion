@@ -244,16 +244,16 @@ export const PHYSICS = {
 };
 
 export const BOSS_CONFIGS = {
-  10:  { hpMult: 10, speedMult: 1.0, shield: 0, weapons: false },
-  20:  { hpMult: 12, speedMult: 1.0, shield: 0, weapons: false },
-  30:  { hpMult: 14, speedMult: 1.0, shield: 0, weapons: false },
-  40:  { hpMult: 15, speedMult: 1.0, shield: 0, weapons: false },
-  50:  { hpMult: 16, speedMult: 1.0, shield: 5, weapons: false },
-  60:  { hpMult: 16, speedMult: 1.0, shield: 5, weapons: false },
-  70:  { hpMult: 20, speedMult: 1.2, shield: 0, weapons: true },
-  80:  { hpMult: 20, speedMult: 1.2, shield: 0, weapons: true },
-  90:  { hpMult: 20, speedMult: 1.2, shield: 0, weapons: true },
-  100: { hpMult: 22, speedMult: 1.2, shield: 0, weapons: true, neon: true },
+  10:  { hpMult: 20, speedMult: 1.0, shield: 0, weapons: false },           // ×2.0
+  20:  { hpMult: 23, speedMult: 1.0, shield: 0, weapons: false },           // ×1.9
+  30:  { hpMult: 27, speedMult: 1.0, shield: 0, weapons: false },           // ×1.9
+  40:  { hpMult: 27, speedMult: 1.0, shield: 0, weapons: false },           // ×1.8
+  50:  { hpMult: 29, speedMult: 1.0, shield: 8, weapons: false },           // ×1.8 HP / ×1.5 escudo
+  60:  { hpMult: 27, speedMult: 1.0, shield: 8, weapons: false },           // ×1.7 HP / ×1.5 escudo
+  70:  { hpMult: 34, speedMult: 1.2, shield: 0, weapons: true },            // ×1.7
+  80:  { hpMult: 32, speedMult: 1.2, shield: 0, weapons: true },            // ×1.6
+  90:  { hpMult: 32, speedMult: 1.2, shield: 0, weapons: true },            // ×1.6
+  100: { hpMult: 31, speedMult: 1.2, shield: 0, weapons: true, neon: true },// ×1.4
 };
 
 export const VISUAL = {
