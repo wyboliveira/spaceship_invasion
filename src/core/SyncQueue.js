@@ -1,7 +1,7 @@
 /**
  * SyncQueue — Camada 3
- * Fila de persistência assíncrona que isola completamente o I/O do Supabase
- * do game loop e da FSM. Nenhum arquivo do jogo chama o Supabase diretamente
+ * Fila de persistência assíncrona que isola completamente o I/O do Firebase
+ * do game loop e da FSM. Nenhum arquivo do jogo chama o Firebase diretamente
  * — eles enfileiram uma tarefa aqui.
  *
  * Comportamento:

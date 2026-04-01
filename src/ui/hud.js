@@ -42,7 +42,7 @@ export function updateHUD() {
  * Deve ser chamado uma única vez durante o boot.
  *
  * @param {Function} onSave — async (username: string) => void
- *   Callback que persiste o novo nome (localStorage + Supabase).
+ *   Callback que persiste o novo nome (localStorage + Firestore).
  */
 export function initUsernameEdit(onSave) {
     const wrapper = document.getElementById('userDisplayWrapper');

@@ -8,7 +8,7 @@
 
 ### Pré-requisitos
 - Node.js 18+
-- Uma conta no [Supabase](https://supabase.com) (opcional — o jogo funciona sem auth no modo guest)
+- Uma conta no [Firebase](https://firebase.google.com) (opcional — o jogo funciona sem auth no modo guest)
 
 ### Instalação
 
@@ -20,11 +20,16 @@ npm install
 
 ### Variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto:
+Crie um arquivo `.env` na raiz do projeto com as chaves do seu projeto Firebase
+(Console Firebase → Project Settings → Your apps → Config):
 
 ```env
-VITE_SUPABASE_URL=https://xxxxxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=sua_anon_key_aqui
+VITE_FIREBASE_API_KEY=sua_api_key
+VITE_FIREBASE_AUTH_DOMAIN=seu-projeto.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=seu-projeto
+VITE_FIREBASE_STORAGE_BUCKET=seu-projeto.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=000000000000
+VITE_FIREBASE_APP_ID=1:000000000000:web:xxxxxxxx
 ```
 
 Sem esse arquivo, o jogo inicia normalmente em **modo guest** (sem login, sem sync).
@@ -47,7 +52,8 @@ npm test         # testes com Vitest
 | Frontend      | Vanilla JS (ES Modules) |
 | Renderização  | Canvas API 2D           |
 | Build tool    | Vite 5                  |
-| Auth & DB     | Supabase (PostgreSQL)   |
+| Auth & DB     | Firebase (Auth + Firestore) |
+| Áudio         | Howler.js               |
 | Testes        | Vitest + jsdom          |
 
 ---
@@ -68,13 +74,13 @@ O projeto usa uma arquitetura em 4 camadas onde cada arquivo tem uma responsabil
 │  Módulos não se chamam diretamente — emitem eventos.│
 ├─────────────────────────────────────────────────────┤
 │  Camada 3 — SyncQueue / api/auth.js                 │
-│  I/O puro. Chamadas ao Supabase, retry com backoff  │
-│  exponencial, timeout por tarefa. O jogo nunca      │
-│  espera rede — tudo é fire-and-forget ou local-first│
+│  I/O puro. Chamadas ao Firebase Auth e Firestore.   │
+│  O jogo nunca espera rede — tudo é fire-and-forget  │
+│  ou local-first.                                    │
 ├─────────────────────────────────────────────────────┤
 │  Camada 4 — main.js                                 │
 │  Orquestrador. Liga as camadas, monta a UI,         │
-│  escuta onAuthStateChange e executa o game loop.    │
+│  escuta onAuthStateChanged e executa o game loop.   │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -121,13 +127,14 @@ localStorage  ←── salvo imediatamente (sem rede)
      │
      │   usuário clica SYNC RECORDS
      ▼
-Supabase DB   ←── upsert com max_score / max_wave
+Firestore     ←── setDoc com merge:true (max_score / max_wave)
      │               pendingSync = false
      ▼
 lastSyncedAt atualizado na UI
 ```
 
-Isso garante que quedas de conexão, cold start do Supabase (free tier ~10s) ou erros de rede **não apagam o progresso** do jogador.
+Isso garante que quedas de conexão ou erros de rede **não apagam o progresso** do jogador.
+O Firestore não tem cold start — responde em ~50ms sempre.
 
 ---
 
@@ -186,17 +193,14 @@ Bosses aparecem nas waves **10, 20, 30, 40, 50, 60, 70, 80, 90 e 100**.
 
 ## Auth & Roles
 
-| Role     | Acesso                                      |
-|----------|---------------------------------------------|
-| `guest`  | Jogo completo, sem sync de records          |
-| `player` | Jogo completo + sync de records no Supabase |
-| `admin`  | Tudo acima + painel de debug de bosses      |
+| Role     | Acesso                                        |
+|----------|-----------------------------------------------|
+| `guest`  | Jogo completo, sem sync de records            |
+| `player` | Jogo completo + sync de records no Firestore  |
+| `admin`  | Tudo acima + painel de debug de bosses        |
 
-Para promover um usuário a admin via Supabase SQL Editor:
-
-```sql
-UPDATE public.profiles SET role = 'admin' WHERE id = '<uuid-do-usuario>';
-```
+Para promover um usuário a admin, edite o documento diretamente no Console do Firebase
+(Firestore → profiles → [documento do usuário] → campo `role` → `admin`).
 
 ---
 
@@ -209,9 +213,9 @@ src/
 │   ├── EventBus.js      # Camada 2 — barramento pub/sub
 │   └── SyncQueue.js     # Camada 3 — fila de I/O com retry
 ├── api/
-│   └── auth.js          # Camada 3 — chamadas ao Supabase
+│   └── auth.js          # Camada 3 — Firebase Auth + Firestore
 ├── lib/
-│   ├── supabase.js      # cliente Supabase (null se sem credenciais)
+│   ├── firebase.js      # inicialização do Firebase (auth + db)
 │   └── localStore.js    # cache localStorage (local-first)
 ├── game/
 │   ├── config.js        # constantes, bandas de dificuldade, BOSS_CONFIGS
@@ -225,9 +229,6 @@ src/
 │   ├── hud.js           # HUD e editor inline de username
 │   └── overlay.js       # show/hide de screens e modais
 └── main.js              # Camada 4 — orquestrador e game loop
-supabase/
-├── setup.sql            # criação inicial da tabela profiles
-└── migration_add_role.sql
 ```
 
 ---
@@ -243,4 +244,4 @@ supabase/
 
 ---
 
-*Projeto em desenvolvimento — v1.0.0 dev edition*
+*Projeto em desenvolvimento — v2.0.0 (Firebase edition)*

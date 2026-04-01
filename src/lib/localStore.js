@@ -2,7 +2,7 @@
  * localStore.js — Cache local de progresso do jogador
  *
  * Armazena score, wave e timestamp de sincronização no localStorage.
- * O banco de dados (Supabase) só é atualizado quando o usuário clica
+ * O banco de dados (Firestore) só é atualizado quando o usuário clica
  * em SYNC RECORDS — nunca de forma automática durante o jogo.
  *
  * Campos armazenados:

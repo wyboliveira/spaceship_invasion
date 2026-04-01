@@ -5,12 +5,12 @@
  *   1. Inicializar e conectar as camadas (FSM, EventBus, localStore, I/O)
  *   2. Executar o game loop (requestAnimationFrame)
  *   3. Montar e desmontar overlays de UI em resposta a eventos da FSM
- *   4. Escutar onAuthStateChange e atualizar estado de auth
+ *   4. Escutar onAuthStateChanged (Firebase) e atualizar estado de auth
  *
  * O que NÃO vive mais aqui:
  *   - Decisão de qual tela mostrar   →  GameFSM.js
  *   - Cache de progresso do jogador  →  lib/localStore.js
- *   - Chamadas diretas ao Supabase   →  api/auth.js (somente no SYNC RECORDS)
+ *   - Chamadas diretas ao Firebase   →  api/auth.js (somente no SYNC RECORDS)
  */
 
 import { state, updateState }            from './game/state.js';
@@ -26,14 +26,19 @@ import {
 } from './game/sprites.js';
 import { updateHUD, initUsernameEdit }   from './ui/hud.js';
 import { 
-  showOverlay, hideOverlay, 
+  hideOverlay,
   showScreen, hideAllScreens, 
   showModal, hideModal 
 } from './ui/overlay.js';
-import { supabase }                      from './lib/supabase.js';
+// auth     → instância do Firebase Authentication (gerencia sessão e tokens)
+// onAuthStateChanged → observer que dispara sempre que o estado de login muda
+//   Equivalente ao supabase.auth.onAuthStateChange do Supabase.
+//   A diferença: recebe um User (ou null), não um { event, session }.
+import { auth }                          from './lib/firebase.js';
+import { onAuthStateChanged }            from 'firebase/auth';
 import {
   signInWithGoogle, signInWithGithub, signOut,
-  getUserProfile, persistScore, updateUsername,
+  getUserProfile, createProfile, persistScore, updateUsername,
   getLeaderboard, pingDatabase,
 } from './api/auth.js';
 import {
@@ -719,19 +724,30 @@ const Leaderboard = {
 
 // ─────────────────────────────────────────────────────────────
 // Auth Listener — Camada 4
-// Escuta o Supabase e emite AUTH_EVENT no bus.
+// Escuta o Firebase e atualiza o estado de auth.
 // A FSM decide o que fazer — nenhum reset() direto aqui.
 // ─────────────────────────────────────────────────────────────
-supabase?.auth.onAuthStateChange(async (event, session) => {
-  console.log('[Auth] Evento:', event);
+// ─── onAuthStateChanged: observer de estado de autenticação ──────────────────
+// Firebase → callback recebe apenas (user)
+//   user !== null → usuário logado    (uid, email disponíveis)
+//   user === null → usuário deslogado
+//   Refresh de token é silencioso e NÃO dispara o callback — sem ruído.
+// O Firebase usa popup (não redirect), então não há hash/search na URL
+// para limpar após o login.
+//
+// state.session é um objeto construído localmente para compatibilidade com o
+// restante do código que acessa state.session?.user?.id e state.session?.user?.email.
+// Firebase fornece user.uid (não user.id) — normalizamos para 'id' aqui.
+onAuthStateChanged(auth, async (firebaseUser) => {
+  // Constrói um objeto "session-like" para manter compatibilidade com o restante
+  // do código que usa state.session?.user?.id.
+  // Em vez de refatorar tudo de uma vez, adaptamos o shape do Firebase para o
+  // formato que o restante do app já conhece.
+  const session = firebaseUser
+    ? { user: { id: firebaseUser.uid, email: firebaseUser.email } }
+    : null;
 
-  // TOKEN_REFRESHED é silencioso — não interrompe o jogo em nenhuma hipótese
-  if (event === 'TOKEN_REFRESHED') return;
-
-  // Limpa qualquer parâmetro OAuth da URL após redirect (hash e query string)
-  if (event === 'SIGNED_IN' && (window.location.hash || window.location.search)) {
-    history.replaceState(null, '', window.location.pathname);
-  }
+  console.log('[Auth] Estado:', firebaseUser ? `logado (${firebaseUser.email})` : 'deslogado');
 
   const prevUserId = state.session?.user?.id;
   updateState({ session });
@@ -744,16 +760,20 @@ supabase?.auth.onAuthStateChange(async (event, session) => {
     }
 
     // Role é permissão de servidor — sempre busca do banco para garantir valor atual.
-    // Chamada simples sem retry para não saturar o pool de conexões em eventos de auth.
+    // Firestore não tem cold start então esta chamada é rápida (~50ms).
     const profile = await getUserProfile(session.user.id).catch(err => {
       console.warn('[Auth] Falha ao carregar perfil do banco:', err.message);
       return null;
     });
 
     if (!localData) {
-      // Primeiro login ou dispositivo diferente — inicializa o cache local com dados do banco
-      const seeded = profile
-        ? seedFromDatabase(session.user.id, profile)
+      // Primeiro login ou dispositivo diferente — inicializa o cache local com dados do banco.
+      // Se profile === null significa que o documento ainda não existe no Firestore
+      // (diferente do Supabase que tinha trigger SQL criando automaticamente).
+      // Criamos o documento agora e usamos o perfil novo como base do cache local.
+      const resolvedProfile = profile ?? await createProfile(session.user.id, session.user.email).catch(() => null);
+      const seeded = resolvedProfile
+        ? seedFromDatabase(session.user.id, resolvedProfile)
         : null;
       updateState({ userProfile: seeded, syncError: null });
     } else if (profile) {
@@ -768,8 +788,9 @@ supabase?.auth.onAuthStateChange(async (event, session) => {
 
   updateHUD();
 
-  // Só navega para o menu se estamos em um estado que permite isso
-  const isMeaningfulChange = event === 'SIGNED_IN' || event === 'SIGNED_OUT' || (!session && prevUserId);
+  // Navega para o menu em mudanças significativas de auth
+  // (login ou logout — não em atualizações silenciosas de token)
+  const isMeaningfulChange = (!!session) !== (!!prevUserId);
   if (isMeaningfulChange) {
     if (GameFSM.state === 'MENU') {
       _renderMenu();
@@ -898,7 +919,7 @@ initUsernameEdit(async (newUsername) => {
   if (updated) updateState({ userProfile: { ...updated, role: state.userProfile?.role || updated.role } });
   updateHUD();
 
-  // Envia ao Supabase em background (sem travar a UI)
+  // Envia ao Firestore em background (sem travar a UI)
   updateUsername(userId, newUsername)
     .catch(err => console.warn('[Auth] Falha ao salvar username no banco:', err.message));
 });
