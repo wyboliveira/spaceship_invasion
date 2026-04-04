@@ -1,6 +1,16 @@
 # SPACESHIP INVASION
 
-> Jogo arcade de nave espacial inspirado no clássico Space Invaders, construído com Vanilla JS + Canvas API. Projeto de estudo e prática com foco em arquitetura de software, autenticação e persistência de dados.
+> **Projeto de estudo.** Jogo arcade de nave espacial inspirado no clássico Space Invaders, construído do zero com Vanilla JS + Canvas API. Desenvolvido para praticar arquitetura de software em camadas, autenticação OAuth, persistência de dados com estratégia local-first e cobertura de testes automatizados.
+
+## Destaques do projeto
+
+- 100 waves com dificuldade progressiva e 10 bosses únicos (sprites programáticos via Canvas API)
+- Autenticação com Google e GitHub via Firebase Auth (popup OAuth, sem redirect)
+- Persistência local-first: progresso salvo no localStorage imediatamente, sincronizado com Firestore sob demanda
+- Leaderboard global via Firestore com paginação
+- Sistema de áudio completo (Howler.js): músicas, SFX, crossfade, duck e playlist
+- Arquitetura em 4 camadas: FSM → EventBus → I/O (Firebase) → Orquestrador
+- Suite de testes com 150 casos (Vitest + jsdom), cobrindo todos os módulos principais
 
 ---
 

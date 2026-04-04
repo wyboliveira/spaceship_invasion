@@ -33,3 +33,6 @@ Thumbs.db
 
 # QA local
 checklist.html
+
+# Claude Code internal files
+.claude/
